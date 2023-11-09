@@ -233,13 +233,22 @@ g14 <- ggplot(data, aes(x = factor(lfsr94), y = y,
   theme_minimal()
 g14
 # doesn't seem that $lfsr94 matters 
+g15 <- ggplot(data, aes(x = factor(sex), y = y,
+)) +
+  geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
+  stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
+  labs(x = "Sex",y = "Wage (USD per hour)")+
+  scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 40), breaks = seq(0,40, 10))+
+  theme_minimal()
+g15
+
 data$class = as.factor(data$class)
 data$unionmme = as.factor(data$unionmme)
 data$unioncov = as.factor(data$unioncov)
 
 data %>% glimpse()
 # List of column names you want to convert to factors
-columns_to_factor <- c("class", "unionmme", "unioncov","lfsr94", "prcitshp", "marital", "sex", "race", "stfips","intmonth", "grade92", "ownchild", "chldpres")
+columns_to_factor <- c("class", "unionmme", "unioncov","lfsr94", "prcitshp", "marital", "sex", "race", "stfips","intmonth", "grade92", "ownchild", "chldpres", "ind02")
 
 # Use lapply to apply as.factor to the specified columns
 data[columns_to_factor] <- lapply(data[columns_to_factor], as.factor)
@@ -248,10 +257,10 @@ data <- data %>% mutate(agesq = age^2)
 
 # models 1-4
 # Model 1: Linear regression on age
-model1 <- as.formula(y ~ age + agesq + grade92 + sex)
-model2 <- as.formula(y ~ age + agesq + grade92 + sex + stfips)
-model3 <- as.formula(y ~ age + agesq + grade92 + sex + stfips + race + class + lfsr94 + unionmme + unioncov + prcitshp)
-model4 <- as.formula(y ~ age + agesq + grade92 + sex + race + marital + class + lfsr94 + unionmme + unioncov + prcitshp + intmonth)
+model1 <- as.formula(y ~ age + grade92)
+model2 <- as.formula(y ~ age + grade92 + agesq + sex)
+model3 <- as.formula(y ~ age + grade92 + agesq + sex + unionmme + marital + class)
+model4 <- as.formula(y ~ age + grade92 + agesq + sex + marital + race + class + unionmme + prcitshp + ind02 + stfips)
 
 # Running simple OLS
 reg1 <- feols(model1, data=data, vcov = 'hetero')
