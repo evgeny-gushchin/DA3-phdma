@@ -34,6 +34,8 @@ table(data$intmonth) # the respondents are more or less evenly distributed acros
 # can we expect seasonality in the wages reported? Possibly
 table(data$stfips)
 # $stfips - state of the respondent
+# location is important but we have too many state, we should find a way to group them
+
 # $weight - Final Weight x 100
 # $earnwke - Earnings per week
 hist(data$earnwke)
@@ -86,7 +88,13 @@ table(data$class) # mostly Private, For Profit
 # $unionmme - Union member (1 - Yes, 2 - No)
 table(data$unionmme) # almost all are not members
 # $unioncov - Covered by a union contract (1 - Yes, 2 - No)
-table(data$unioncov) # mostly No
+table(data$unioncov)# mostly No
+table(data$unioncov,data$unionmme)
+#we can make one new variable from these two
+data <- data %>% mutate(union_status = ifelse(unionmme == "Yes", "Union member/contract",
+                                       ifelse(unioncov == "Yes", "Union member/contract", "Non-member/no contract")))
+
+table(data$union_status)
 # $lfsr94 - 
 table(data$lfsr94) # all employed, mostly at work
 
@@ -213,46 +221,37 @@ g11 <- ggplot(data, aes(x = factor(class), y = y,
 g11
 # seems that $class matters 
 
-g12 <- ggplot(data, aes(x = factor(unionmme), y = y,
+
+g12 <- ggplot(data, aes(x = factor(union_status), y = y,
 )) +
   geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
   stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
-  labs(x = "Union membership",y = "Wage (USD per hour)")+
+  labs(x = "Union status",y = "Wage (USD per hour)")+
   scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 40), breaks = seq(0,40, 10))+
   theme_minimal()
 g12
-# seems that $unionmme matters 
+# seems that $union_status matters 
 
-g13 <- ggplot(data, aes(x = factor(unioncov), y = y,
-)) +
-  geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
-  stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
-  labs(x = "Union contract",y = "Wage (USD per hour)")+
-  scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 40), breaks = seq(0,40, 10))+
-  theme_minimal()
-g13
-# seems that $unioncov matters 
-
-g14 <- ggplot(data, aes(x = factor(lfsr94), y = y,
+g13 <- ggplot(data, aes(x = factor(lfsr94), y = y,
 )) +
   geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
   stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
   labs(x = "Employment status",y = "Wage (USD per hour)")+
   scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 40), breaks = seq(0,40, 10))+
   theme_minimal()
-g14
+g13
 # doesn't seem that $lfsr94 matters 
-g15 <- ggplot(data, aes(x = factor(sex), y = y,
+g14 <- ggplot(data, aes(x = factor(sex), y = y,
 )) +
   geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
   stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
   labs(x = "Sex",y = "Wage (USD per hour)")+
   scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 40), breaks = seq(0,40, 10))+
   theme_minimal()
-g15
+g14
 
 # List of column names you want to convert to factors
-columns_to_factor <- c("educ_level", "class", "unionmme", "unioncov","lfsr94", "prcitshp", "marital", "sex", "race", "stfips","intmonth", "grade92", "ownchild", "chldpres", "ind02")
+columns_to_factor <- c("educ_level", "class", "union_status","lfsr94", "prcitshp", "marital", "sex", "race", "stfips","intmonth", "grade92", "ownchild", "chldpres", "ind02")
 
 # Use lapply to apply as.factor to the specified columns
 data[columns_to_factor] <- lapply(data[columns_to_factor], as.factor)
@@ -262,9 +261,9 @@ data <- data %>% mutate(age_squared = age^2)
 # models 1-4
 # Model 1: Linear regression on age
 model1 <- as.formula(y ~ age + educ_level)
-model2 <- as.formula(y ~ age + educ_level + age_squared + sex)
-model3 <- as.formula(y ~ age + educ_level + age_squared + sex + unionmme + marital + class)
-model4 <- as.formula(y ~ age + educ_level + age_squared + sex + marital + race + class + unionmme + prcitshp + ind02 + stfips)
+model2 <- as.formula(y ~ age + educ_level + age_squared + sex + union_status)
+model3 <- as.formula(y ~ age + educ_level + age_squared + sex + union_status + marital + class)
+model4 <- as.formula(y ~ age + educ_level + age_squared + sex + marital + race + class + union_status + prcitshp + ind02 + stfips)
 
 # Running simple OLS
 reg1 <- feols(model1, data=data, vcov = 'hetero')
