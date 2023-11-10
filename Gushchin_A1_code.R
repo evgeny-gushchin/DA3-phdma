@@ -49,6 +49,15 @@ summary(data$y)
 table(data$grade92)
 # most cases are High school graduate, diploma or GED (code 39)
 # or Some college but no degree (code 40)
+# we can transform this variable to reduce its size
+data <- data %>% mutate(educ_level = ifelse(grade92 < 39, "No high school diploma", 
+                                            ifelse(grade92 < 41, "High school diploma", 
+                                            ifelse(grade92 == 41, "Associate degree -- occupational/vocational", 
+                                            ifelse(grade92 == 42, "Associate degree -- academic program", 
+                                            ifelse(grade92 == 43, "Bachelor's degree",
+                                            ifelse(grade92 < 46, "Master's degree/Professional school", "PhD" )))))))
+
+table(data$educ_level)
 # $race - race
 table(data$race) # most cases 1 - White, 2 - Black and 4 - Asian
 table(data$ethnic) # ‘What is the origin or descent of ...?’ 
@@ -98,7 +107,7 @@ g1 <- ggplot(data, aes(x=age, y=y), fill = factor(unionmme), color=factor(unionm
   geom_smooth(method = "lm", formula = y ~ poly(x, 2), se = FALSE, , alpha = 0.1, linetype = "dashed")
 g1
 
-g2 <- ggplot(data, aes(x = factor(grade92), y = y,
+g2 <- ggplot(data, aes(x = factor(educ_level), y = y,
                         fill = factor(sex), color=factor(sex))) +
   geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
   #stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
@@ -242,25 +251,20 @@ g15 <- ggplot(data, aes(x = factor(sex), y = y,
   theme_minimal()
 g15
 
-data$class = as.factor(data$class)
-data$unionmme = as.factor(data$unionmme)
-data$unioncov = as.factor(data$unioncov)
-
-data %>% glimpse()
 # List of column names you want to convert to factors
-columns_to_factor <- c("class", "unionmme", "unioncov","lfsr94", "prcitshp", "marital", "sex", "race", "stfips","intmonth", "grade92", "ownchild", "chldpres", "ind02")
+columns_to_factor <- c("educ_level", "class", "unionmme", "unioncov","lfsr94", "prcitshp", "marital", "sex", "race", "stfips","intmonth", "grade92", "ownchild", "chldpres", "ind02")
 
 # Use lapply to apply as.factor to the specified columns
 data[columns_to_factor] <- lapply(data[columns_to_factor], as.factor)
 
-data <- data %>% mutate(agesq = age^2)
+data <- data %>% mutate(age_squared = age^2)
 
 # models 1-4
 # Model 1: Linear regression on age
-model1 <- as.formula(y ~ age + grade92)
-model2 <- as.formula(y ~ age + grade92 + agesq + sex)
-model3 <- as.formula(y ~ age + grade92 + agesq + sex + unionmme + marital + class)
-model4 <- as.formula(y ~ age + grade92 + agesq + sex + marital + race + class + unionmme + prcitshp + ind02 + stfips)
+model1 <- as.formula(y ~ age + educ_level)
+model2 <- as.formula(y ~ age + educ_level + age_squared + sex)
+model3 <- as.formula(y ~ age + educ_level + age_squared + sex + unionmme + marital + class)
+model4 <- as.formula(y ~ age + educ_level + age_squared + sex + marital + race + class + unionmme + prcitshp + ind02 + stfips)
 
 # Running simple OLS
 reg1 <- feols(model1, data=data, vcov = 'hetero')
@@ -328,5 +332,8 @@ main_table <- data.frame(rbind(t(BIC), t(RMSE), rmse_cv, regressors))
 colnames(main_table)<-c("Model1", "Model2", "Model3", "Model4")
 row.names(main_table) <- c("BIC", "RMSE (full sample)", "RMSE (4-fold cross validation)", "Number of regressors")
 main_table
+
+stargazer(main_table, summary = F, digits=2, float=F, out="A1-results-table-Gushchin.tex")
+stargazer(main_table, summary = F, digits=2, float=F, type="text",  out="A1-results-table-Gushchin.tex")
 
 
