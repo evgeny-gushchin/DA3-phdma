@@ -47,6 +47,39 @@ data$y = data$earnwke/data$uhours # this is our variable of interest
 data <- data %>% mutate(y = earnwke/uhours)
 hist(data$y)
 summary(data$y) 
+
+state_means <- data %>% group_by(stfips) %>% summarise(y_mean = mean(y)) %>% arrange(y_mean)
+state_means$state_group <- NA
+state_means$state_group[1:17] <- "Low-pay states"
+state_means$state_group[18:34] <- "Medium-pay states"
+state_means$state_group[35:51] <- "High-pay states"
+table(state_means$state_group)
+data <- data %>% right_join(state_means, by = "stfips")
+table(data$state_group)
+# now I try to use the data on state-level minimum wage in 2014
+# source: https://www.dol.gov/agencies/whd/state/minimum-wage/history
+data <- data %>% mutate(min_wage = ifelse(stfips %in% c("AK", "DE", "NV"), 7.75, 
+                                   ifelse(stfips == "AR", 6.25,                                    
+                                   ifelse(stfips %in% c("AZ", "MT"), 7.9, 
+                                   ifelse(stfips == "CA", 9,
+                                   ifelse(stfips %in% c("CO", "MA", "NY", "RI"), 8, 
+                                   ifelse(stfips == "CT", 8.7,
+                                   ifelse(stfips == "FL", 7.93,
+                                   ifelse(stfips %in% c("GA", "WY"), 5.15,
+                                   ifelse(stfips %in% c("HI", "ID", "IN", "IA", "KS", "KY", "MD", "MN", "NE", "NH", "ND", "NC", "PA", "SD", "TX", "UT", "VA", "WV", "WI", "AL", "LA", "SC", "MS", "TN"), 7.25, 
+                                   ifelse(stfips %in% c("IL", "NJ"), 8.25,
+                                   ifelse(stfips %in% c("ME", "MO"), 7.5,
+                                   ifelse(stfips == "MI", 8.15,
+                                   ifelse(stfips == "NM", 7.5,
+                                   ifelse(stfips == "OH", 7.6,
+                                   ifelse(stfips == "OK", 4.625,
+                                   ifelse(stfips == "OR", 9.1,
+                                   ifelse(stfips == "VT", 8.73,
+                                   ifelse(stfips == "WA", 9.32,
+                                   ifelse(stfips == "DC", 9.5,9999999))))))))))))))))))))
+summary(data$min_wage) 
+# AL, LA, MS, SC and TN have not adopted a state minimum wage, thus the federal rate of 7.25 is applied
+
 # $grade92 - highest educational grade completed
 table(data$grade92)
 # most cases are High school graduate, diploma or GED (code 39)
@@ -62,6 +95,13 @@ data <- data %>% mutate(educ_level = ifelse(grade92 < 39, "No high school diplom
 table(data$educ_level)
 # $race - race
 table(data$race) # most cases 1 - White, 2 - Black and 4 - Asian
+# we can reduce the number of groups here
+data <- data %>% mutate(race_new = ifelse(race == 1, "White", 
+                                   ifelse(race == 2, "Black", 
+                                   ifelse(race == 3, "American Indian", 
+                                   ifelse(race == 4, "Asian", "Other" )))))
+table(data$race_new)
+
 table(data$ethnic) # ‘What is the origin or descent of ...?’ 
 #This variable subdivides the Hispanic community by national origin of ancestry.
 # $age - age
@@ -82,9 +122,20 @@ table(data$prcitshp) # mostly Native, Born In US
 table(data$state) # sometimes digits, sometimes letters (messy)
 # $ind02 - 3-digit NAICS-based industry code
 table(data$ind02) # mostly Restaurants and other food services (722 exc. 7224) 
+# we can make this variable in 5 groups
+data <- data %>% mutate(industry = ifelse(ind02 == "Drinking places, alcoholic beverages (7224)", "Drinking places, alcoholic beverages (7224)", 
+                                   ifelse(ind02 == "Other amusement, gambling, and recreation industries (713 exc. 71395)", "Other amusement, gambling, and recreation industries (713 exc. 71395)", 
+                                   ifelse(ind02 == "Restaurants and other food services (722 exc. 7224)", "Restaurants and other food services (722 exc. 7224)", 
+                                   ifelse(ind02 == "Traveler accommodation (7211)", "Traveler accommodation (7211)", "Other" )))))
+table(data$industry)
 # $occ2012 - SOC-based occupation code (used for filtering)
 # $class - Class of worker
 table(data$class) # mostly Private, For Profit 
+# we can unite all governement
+data <- data %>% mutate(class_new = ifelse(class == "Private, For Profit", "Private, For Profit", 
+                                    ifelse(class == "Private, Nonprofit", "Private, Nonprofit", "Government" )))
+table(data$class_new)
+
 # $unionmme - Union member (1 - Yes, 2 - No)
 table(data$unionmme) # almost all are not members
 # $unioncov - Covered by a union contract (1 - Yes, 2 - No)
@@ -130,7 +181,7 @@ g2 <- ggplot(data, aes(x = factor(educ_level), y = y,
 g2
 #save_fig("A1-figure2-wages_education_sex", output, "small")
 
-g3 <- ggplot(data, aes(x = factor(stfips), y = y,
+g3 <- ggplot(data, aes(x = factor(state_group), y = y,
                        )) +
   geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
   stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
@@ -139,8 +190,16 @@ g3 <- ggplot(data, aes(x = factor(stfips), y = y,
   theme_minimal()
 g3
 # $stfips does seem to matter
-#save_fig("A1-figure2-wages_education_sex", output, "small")
 
+g3a <- ggplot(data, aes(x = factor(min_wage), y = y,
+)) +
+  geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
+  stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
+  labs(x = "State",y = "Wage (USD per hour)")+
+  scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 40), breaks = seq(0,40, 10))+
+  theme_minimal()
+g3a 
+#
 g4 <- ggplot(data, aes(x = factor(intmonth), y = y,
 )) +
   geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
@@ -151,7 +210,7 @@ g4 <- ggplot(data, aes(x = factor(intmonth), y = y,
 g4
 # doesn't seem that $intmonth matters
 
-g5 <- ggplot(data, aes(x = factor(race), y = y,
+g5 <- ggplot(data, aes(x = factor(race_new), y = y,
 )) +
   geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
   stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
@@ -201,7 +260,7 @@ g9 <- ggplot(data, aes(x = factor(prcitshp), y = y,
 g9
 # doesn't seem that $prcitshp matters much
 
-g10 <- ggplot(data, aes(x = factor(ind02), y = y,
+g10 <- ggplot(data, aes(x = factor(industry), y = y,
 )) +
   geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
   stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
@@ -211,7 +270,7 @@ g10 <- ggplot(data, aes(x = factor(ind02), y = y,
 g10
 # doesn't seem that $ind02 matters somewhat
 
-g11 <- ggplot(data, aes(x = factor(class), y = y,
+g11 <- ggplot(data, aes(x = factor(class_new), y = y,
 )) +
   geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
   stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
@@ -251,7 +310,7 @@ g14 <- ggplot(data, aes(x = factor(sex), y = y,
 g14
 
 # List of column names you want to convert to factors
-columns_to_factor <- c("educ_level", "class", "union_status","lfsr94", "prcitshp", "marital", "sex", "race", "stfips","intmonth", "grade92", "ownchild", "chldpres", "ind02")
+columns_to_factor <- c("educ_level", "class_new", "union_status","lfsr94", "prcitshp", "marital", "sex", "race_new", "state_group","intmonth", "grade92", "ownchild", "chldpres", "industry")
 
 # Use lapply to apply as.factor to the specified columns
 data[columns_to_factor] <- lapply(data[columns_to_factor], as.factor)
@@ -260,10 +319,10 @@ data <- data %>% mutate(age_squared = age^2)
 
 # models 1-4
 # Model 1: Linear regression on age
-model1 <- as.formula(y ~ age + educ_level)
-model2 <- as.formula(y ~ age + educ_level + age_squared + sex + union_status)
-model3 <- as.formula(y ~ age + educ_level + age_squared + sex + union_status + marital + class)
-model4 <- as.formula(y ~ age + educ_level + age_squared + sex + marital + race + class + union_status + prcitshp + ind02 + stfips)
+model1 <- as.formula(y ~ age + age_squared + educ_level)
+model2 <- as.formula(y ~ age + age_squared + educ_level + min_wage + union_status)
+model3 <- as.formula(y ~ age + age_squared + educ_level + min_wage + union_status + sex + class_new + age:sex)
+model4 <- as.formula(y ~ age + age_squared + educ_level + min_wage + union_status + sex + class_new + age:sex + race_new + prcitshp + industry + educ_level:sex)
 
 # Running simple OLS
 reg1 <- feols(model1, data=data, vcov = 'hetero')
