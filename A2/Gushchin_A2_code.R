@@ -484,10 +484,72 @@ g29
 data$days_since_last_review <- data$last_scraped - data$last_review
 table(data$days_since_last_review)
 #cov(as.numeric(data$days_since_first_review), data$days_since_last_review)
+g30 <- ggplot(data, aes(x=days_since_last_review, y=price_numeric)) + 
+  geom_point(alpha=0.05)+ theme_minimal() +
+  labs(x = "Days since last review",y = "Apartment price")+
+  scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))
+g30
+# could be relevant
+# but not sure how to treat missing values here
 
+table(data$review_scores_rating)
+g31 <- ggplot(data, aes(x=review_scores_rating, y=price_numeric)) + 
+  geom_point(alpha=0.05)+ theme_minimal() +
+  labs(x = "Review rating",y = "Apartment price")+
+  scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))
+g31
+g31a <- ggplot(data, aes(x = factor(round(data$review_scores_rating,1)), y = price_numeric,
+)) +
+  geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
+  stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
+  labs(x = "Review rating",y = "Apartment price")+
+  scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))+
+  theme_minimal()
+g31a
 
-print(data$days_since_first_review[100]) 
+table(data$review_scores_value)
+g32 <- ggplot(data, aes(x=review_scores_value, y=price_numeric)) + 
+  geom_point(alpha=0.05)+ theme_minimal() +
+  labs(x = "Review value",y = "Apartment price")+
+  scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))
+g32
+g32a <- ggplot(data, aes(x = factor(round(data$review_scores_value,1)), y = price_numeric,
+)) +
+  geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
+  stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
+  labs(x = "Review value",y = "Apartment price")+
+  scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))+
+  theme_minimal()
+g32a
 
+# Specify the variables for which you want to calculate correlations
+selected_variables <- c(
+  "review_scores_rating",
+  "review_scores_accuracy",
+  "review_scores_cleanliness",
+  "review_scores_checkin",
+  "review_scores_communication",
+  "review_scores_location",
+  "review_scores_value"
+)
+# Extract the selected variables from the data frame
+selected_data <- data[, selected_variables]
+selected_data <- selected_data[!is.na(selected_data)]
+# Calculate pairwise correlations
+correlation_matrix4 <- cor(selected_data)
+# Print the correlation matrix
+print(correlation_matrix4)
+
+table(data$instant_bookable)
+
+table(data$calculated_host_listings_count)
+#may be relevant
+table(data$calculated_host_listings_count_entire_homes)
+#may be relevant
+table(data$calculated_host_listings_count_private_rooms)
+#doesn't seem very relevant
+table(data$calculated_host_listings_count_shared_rooms)
+#doesn't seem very relevant
 
 summary(data$reviews_per_month) # it seems that the NA value here is simply 0
 data$reviews_per_month_flag <- 0
