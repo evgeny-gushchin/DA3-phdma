@@ -9,7 +9,8 @@ library(stringr)
 setwd("/Users/evgenygushchin/Documents/GitHub/DA3-phdma/A2")
 getwd() 
 
-# open & clean raw data
+#=================== Task 1 =====================
+##### open & filter raw data ######
 data_original <- read.csv("listings_Vienna_09_2023.csv") # this is the latest data available
 data_original %>% glimpse()
 
@@ -24,6 +25,7 @@ print(na_proportion)
 data <- data_original %>% select(-c(neighbourhood_group_cleansed, bathrooms, calendar_updated, license))
 data %>% glimpse()
 
+##### data processing & feature engineering ######
 summary(data$accommodates) 
 data <- data %>% filter(accommodates<7 & accommodates>1)
 summary(data$accommodates) # now we have the data for places that can accomodate 2-6 people
@@ -57,7 +59,8 @@ g1 <- ggplot(data, aes(x = factor(source), y = price_numeric,
   scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))+
   theme_minimal()
 g1
-# but the plots suggest that it matters, should be cautious as it is not clear how to interpret it
+# but the plots suggest that source matters
+# basically the variable seems to show for how long the apartment was online (city scrape = new, previous scrape = old)
 
 # Variables $name, $description, $neighborhood_overview, $host_about require text analysis
 # will not use them because of the time constraint
@@ -92,7 +95,9 @@ g3
 
 table(data$host_response_rate) # N/A's can be trasfered into zeros as well as the blanck value
 data$host_response_rate[data$host_response_rate %in% c("N/A","")] <- "0%"
+# Help from ChatGPT
 data$host_response_rate_numeric <- as.numeric(sub("%", "", data$host_response_rate))
+
 summary(data$host_response_rate_numeric) 
 g4 <- ggplot(data, aes(x=host_response_rate_numeric, y=price_numeric)) + 
   geom_point(alpha=0.05)+ theme_minimal() +
@@ -111,6 +116,7 @@ g5 <- ggplot(data, aes(x=host_acceptance_rate_numeric, y=price_numeric)) +
   scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))
 g5
 # the variable doesn't seem very informative (although 0% and 100% may be important)
+cor(data$host_response_rate_numeric, data$host_acceptance_rate_numeric) # very correlated, yet not identical
 
 table(data$host_is_superhost) # the blanc values should be treated as false
 data$host_is_superhost[data$host_is_superhost == ""] <- "f"
@@ -239,7 +245,7 @@ data <- data %>% mutate(bathroom = ifelse(bathrooms_text == "0 baths", 0,
                                    ifelse(bathrooms_text == "1.5 baths", 1.5, 
                                    ifelse(bathrooms_text == "2 baths", 2,
                                    ifelse(bathrooms_text == "2.5 baths", 2.5,
-                                   ifelse(bathrooms_text == "3 baths", 3,3.5 )))))))))
+                                   ifelse(bathrooms_text == "3 baths", 3,3.5 ))))))))
 table(data$bathroom) #will use this variable
 
 table(data$bedrooms) 
@@ -534,16 +540,37 @@ selected_variables <- c(
 )
 # Extract the selected variables from the data frame
 selected_data <- data[, selected_variables]
-selected_data <- selected_data[!is.na(selected_data)]
+# Chat GPT help
+selected_data <- selected_data[complete.cases(selected_data), ]
 # Calculate pairwise correlations
 correlation_matrix4 <- cor(selected_data)
 # Print the correlation matrix
-print(correlation_matrix4)
+print(correlation_matrix4) # somewhat correlated, but can use all
 
 table(data$instant_bookable)
+g33 <- ggplot(data, aes(x = factor(instant_bookable), y = price_numeric,
+)) +
+  geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
+  stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
+  labs(x = "Bookable now?",y = "Apartment price")+
+  scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))+
+  theme_minimal()
+g33
+# instant_bookable seems somewhat relevant
 
 table(data$calculated_host_listings_count)
+data$calculated_host_listings_count[data$calculated_host_listings_count > 9] <- 10
 #may be relevant
+g34 <- ggplot(data, aes(x = factor(calculated_host_listings_count), y = price_numeric,
+)) +
+  geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
+  stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
+  labs(x = "Host's listings count",y = "Apartment price")+
+  scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))+
+  theme_minimal()
+g34
+cor(data$calculated_host_listings_count, data$host_listings_count) # very correlated probably no need
+
 table(data$calculated_host_listings_count_entire_homes)
 #may be relevant
 table(data$calculated_host_listings_count_private_rooms)
@@ -556,3 +583,30 @@ data$reviews_per_month_flag <- 0
 data$reviews_per_month_flag[is.na(data$reviews_per_month)] <- 1 #creating a flag variable
 data$reviews_per_month[is.na(data$reviews_per_month)] <- 0
 summary(data$reviews_per_month)
+g35 <- ggplot(data, aes(x = factor(reviews_per_month), y = price_numeric,
+)) +
+  geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
+  stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
+  labs(x = "Reviews per month",y = "Apartment price")+
+  scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))+
+  theme_minimal()
+g35
+g35a <- ggplot(data, aes(x=reviews_per_month, y=price_numeric)) + 
+  geom_point(alpha=0.05)+ theme_minimal() +
+  labs(x = "Reviews per month",y = "Apartment price")+
+  scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))
+g35a
+
+
+
+#### First model: OLS + Lasso #####
+
+#### Second model: Random Forest #####
+
+#### Third model: Boosting #####
+
+#=================== Task 2 =====================
+# now we compare the model performance 
+
+#=================== Task 3 =====================
+##### Shapley values #####
