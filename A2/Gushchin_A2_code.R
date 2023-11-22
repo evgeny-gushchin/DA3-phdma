@@ -1,10 +1,24 @@
 ### Assignment 2 Prediction with ML for Economists Fall 2023 ###
 ### by Evgeny Gushchin
 rm(list = ls()) # cleaning the environment
-
+#install.packages("installr")
+#installr::updateR()
+#install.packages("remotes")
+#remotes::install_github("cran/glmnet")
+install.packages("glmnet", type = "binary")
 library(ggplot2)
 library(dplyr)
 library(stringr)
+library(caret)
+#library(skimr)
+library(grid)
+library(glmnet)
+library(stargazer)
+library(xtable)
+#library(directlabels)
+library(knitr)
+#library(cowplot)
+library(tibble)
 
 setwd("/Users/evgenygushchin/Documents/GitHub/DA3-phdma/A2")
 getwd() 
@@ -614,10 +628,73 @@ columns_to_factor <- c("host_response_time", "host_is_superhost", "host_listings
 # Use lapply to apply as.factor to the specified columns
 data[columns_to_factor] <- lapply(data[columns_to_factor], as.factor)
 data %>% glimpse()
-data <- data %>% mutate(accommodates_sq = accommodates^2, bathroom_sq = bathroom^2, beds_sq = beds^2, bedrooms_sq = bedrooms^2, amenity_length_sq = amenity_length^2, days_since_first_review_sq = days_since_first_review^2, days_since_last_review_sq = days_since_last_review^2)
+data <- data %>% mutate(accommodates_sq = accommodates^2, bathroom_sq = bathroom^2, beds_sq = beds^2, bedrooms_sq = bedrooms^2, amenity_length_sq = amenity_length^2) #days_since_first_review_sq = days_since_first_review^2, days_since_last_review_sq = days_since_last_review^2)
+continuous_vars <- c("accommodates","accommodates_sq","bathroom","bathroom_sq","beds","beds_sq","bedrooms","bedrooms_sq", "amenity_length", "amenity_length_sq") #"days_since_first_review", "days_since_first_review_sq","days_since_last_review","days_since_last_review_sq")
+
+#################################
+# Separate hold-out set #
+#################################
+
+# create a holdout set (20% of observations)
+smp_size <- floor(0.2 * nrow(data))
+
+# Set the random number generator: It will make results reproducable
+set.seed(20180123)
+
+# create ids:
+# 1) seq_len: generate regular sequences
+# 2) sample: select random rows from a table
+holdout_ids <- sample(seq_len(nrow(data)), size = smp_size)
+data$holdout <- 0
+data$holdout[holdout_ids] <- 1
+
+#Hold-out set Set
+data_holdout <- data %>% filter(holdout == 1)
+
+#Working data set
+data_work <- data %>% filter(holdout == 0)
 
 #### First model: OLS + Lasso #####
+# take model 8 (and find observations where there is no missing data)may
+vars_model_7 <- c("price_numeric", continuous_vars)
+vars_model_8 <- c("price_numeric", continuous_vars, columns_to_factor)
 
+# Set lasso tuning parameters
+n_folds=5
+train_control <- trainControl(method = "cv", number = n_folds)
+tune_grid <- expand.grid("alpha" = c(1), "lambda" = seq(0.05, 1, by = 0.05))
+
+# We use model 7 without the interactions so that it is easy to compare later to post lasso ols
+formula <- formula(paste0("price_numeric ~ ", paste(setdiff(vars_model_8, "price_numeric"), collapse = " + ")))
+
+set.seed(1234)
+lasso_model <- caret::train(formula,
+                            data = data_work,
+                            method = "glmnet",
+                            preProcess = c("center", "scale"),
+                            trControl = train_control,
+                            tuneGrid = tune_grid,
+                            na.action=na.exclude)
+
+print(lasso_model$bestTune$lambda)
+
+lasso_coeffs <- coef(lasso_model$finalModel, lasso_model$bestTune$lambda) %>%
+  as.matrix() %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "variable") %>%
+  rename(coefficient = `s1`)  # the column has a name "1", to be renamed
+
+print(lasso_coeffs)
+
+lasso_coeffs_nz<-lasso_coeffs %>%
+  filter(coefficient!=0)
+print(nrow(lasso_coeffs_nz))
+
+# Evaluate model. CV error:
+lasso_cv_rmse <- lasso_model$results %>%
+  filter(lambda == lasso_model$bestTune$lambda) %>%
+  dplyr::select(RMSE)
+print(lasso_cv_rmse[1, 1])
 #### Second model: Random Forest #####
 
 #### Third model: Boosting #####
