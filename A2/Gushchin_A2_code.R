@@ -150,6 +150,7 @@ cor(data$host_listings_count[!is.na(data$host_listings_count)], data$host_total_
 # let the NA value become zero
 data$host_listings_count[is.na(data$host_listings_count)] <- 0
 data$host_listings_count[data$host_listings_count > 9] <- 10
+data$host_listings_count[data$host_listings_count== 0] <- 1 # if host in our dataset then there should be at least one apartment online
 table(data$host_listings_count) 
 g8 <- ggplot(data, aes(x = factor(host_listings_count), y = price_numeric,
 )) +
@@ -159,8 +160,17 @@ g8 <- ggplot(data, aes(x = factor(host_listings_count), y = price_numeric,
   scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))+
   theme_minimal()
 g8
+# may be relevant
 
 table(data$host_verifications)
+g85 <- ggplot(data, aes(x = factor(host_verifications), y = price_numeric,
+)) +
+  geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
+  stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
+  labs(x = "Host verification",y = "Apartment price")+
+  scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))+
+  theme_minimal()
+g85
 # not sure this is very relevant for apartment pricing
 
 table(data$host_has_profile_pic)
@@ -175,6 +185,7 @@ g9 <- ggplot(data, aes(x = factor(host_has_profile_pic), y = price_numeric,
   theme_minimal()
 g9
 # the variable may be somewhat relevant
+# should not be relevant for a company
 
 table(data$host_identity_verified)
 # again let's assume the missing value is also "f"
@@ -597,7 +608,13 @@ g35a <- ggplot(data, aes(x=reviews_per_month, y=price_numeric)) +
   scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))
 g35a
 
+# List of column names you want to convert to factors
+columns_to_factor <- c("host_response_time", "host_is_superhost", "host_listings_count", "neighbourhood_cleansed", "property_type", "wifi")
 
+# Use lapply to apply as.factor to the specified columns
+data[columns_to_factor] <- lapply(data[columns_to_factor], as.factor)
+data %>% glimpse()
+data <- data %>% mutate(accommodates_sq = accommodates^2, bathroom_sq = bathroom^2, beds_sq = beds^2, bedrooms_sq = bedrooms^2, amenity_length_sq = amenity_length^2, days_since_first_review_sq = days_since_first_review^2, days_since_last_review_sq = days_since_last_review^2)
 
 #### First model: OLS + Lasso #####
 
