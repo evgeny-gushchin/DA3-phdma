@@ -4,25 +4,28 @@ rm(list = ls()) # cleaning the environment
 #install.packages("installr")
 #installr::updateR()
 #install.packages("remotes")
+#install.packages("skimr")
+#install.packages("directlabels")
+install.packages("cowplot")
 #remotes::install_github("cran/glmnet")
-install.packages("glmnet", type = "binary")
+#install.packages("glmnet", type = "binary")
 library(ggplot2)
 library(dplyr)
 library(stringr)
 library(caret)
-#library(skimr)
+library(skimr)
 library(grid)
 library(glmnet)
 library(stargazer)
 library(xtable)
-#library(directlabels)
+library(directlabels)
 library(knitr)
-#library(cowplot)
+library(cowplot)
 library(tibble)
 
 setwd("/Users/evgenygushchin/Documents/GitHub/DA3-phdma/A2")
 getwd() 
-
+options(digits = 3)
 #=================== Task 1 =====================
 ##### open & filter raw data ######
 data_original <- read.csv("listings_Vienna_09_2023.csv") # this is the latest data available
@@ -61,7 +64,7 @@ summary(data$price_numeric)
 
 # some columns we can drop because they don't carry any important information for our task
 # listing_url, scrape_id, picture_url, host_url, host_picture_url, host_thumbnail_url
-data <- data %>% select(-c(listing_url, scrape_id, picture_url, host_url, host_picture_url, host_thumbnail_url))
+data <- data %>% select(-c(listing_url, scrape_id, picture_url, host_url, host_picture_url, host_thumbnail_url, price))
 data %>% glimpse() 
 
 table(data$source) # not sure how this variable can be useful
@@ -656,8 +659,8 @@ data_work <- data %>% filter(holdout == 0)
 
 #### First model: OLS + Lasso #####
 # take model 8 (and find observations where there is no missing data)may
-vars_model_7 <- c("price_numeric", continuous_vars)
-vars_model_8 <- c("price_numeric", continuous_vars, columns_to_factor)
+#vars_model_7 <- c("price_numeric", continuous_vars)
+vars_model_1 <- c("price_numeric", continuous_vars, columns_to_factor)
 
 # Set lasso tuning parameters
 n_folds=5
@@ -665,7 +668,7 @@ train_control <- trainControl(method = "cv", number = n_folds)
 tune_grid <- expand.grid("alpha" = c(1), "lambda" = seq(0.05, 1, by = 0.05))
 
 # We use model 7 without the interactions so that it is easy to compare later to post lasso ols
-formula <- formula(paste0("price_numeric ~ ", paste(setdiff(vars_model_8, "price_numeric"), collapse = " + ")))
+formula <- formula(paste0("price_numeric ~ ", paste(setdiff(vars_model_1, "price_numeric"), collapse = " + ")))
 
 set.seed(1234)
 lasso_model <- caret::train(formula,
@@ -695,6 +698,27 @@ lasso_cv_rmse <- lasso_model$results %>%
   filter(lambda == lasso_model$bestTune$lambda) %>%
   dplyr::select(RMSE)
 print(lasso_cv_rmse[1, 1])
+
+# Extract predictors from data_holdout
+data_holdout_predictors <- data_holdout[, c(continuous_vars, columns_to_factor)]
+
+# Preprocess the holdout data (center and scale)
+data_holdout_processed <- predict(lasso_model$preProcess, newdata = data_holdout_predictors)
+
+# Use the LASSO model to predict price_numeric for the holdout set
+predictions_holdout <- predict(lasso_model, newdata = data_holdout_processed)
+
+# Print or check the predictions
+print(predictions_holdout)
+# Print or check the predictions
+length(predictions_holdout)
+length(data_holdout$price_numeric)
+sqrt(sum((predictions_holdout-data_holdout$price_numeric)^2))
+# look at holdout RMSE
+# look at holdout RMSE
+model1_level_holdout_rmse <- mse_lev(predict(model1_level, newdata = data_holdout), data_holdout[,"price_numeric"] %>% pull)**(1/2)
+model1_level_holdout_rmse
+
 #### Second model: Random Forest #####
 
 #### Third model: Boosting #####
