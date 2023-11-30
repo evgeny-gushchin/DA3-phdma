@@ -22,6 +22,7 @@ library(directlabels)
 library(knitr)
 library(cowplot)
 library(tibble)
+library(ranger)
 
 setwd("/Users/evgenygushchin/Documents/GitHub/DA3-phdma/A2")
 getwd() 
@@ -699,32 +700,104 @@ lasso_cv_rmse <- lasso_model$results %>%
   dplyr::select(RMSE)
 print(lasso_cv_rmse[1, 1])
 
-# Extract predictors from data_holdout
-data_holdout_predictors <- data_holdout[, c(continuous_vars, columns_to_factor)]
-
-# Preprocess the holdout data (center and scale)
-data_holdout_processed <- predict(lasso_model$preProcess, newdata = data_holdout_predictors)
-
-# Use the LASSO model to predict price_numeric for the holdout set
-predictions_holdout <- predict(lasso_model, newdata = data_holdout_processed)
-
-# Print or check the predictions
-print(predictions_holdout)
-# Print or check the predictions
-length(predictions_holdout)
-length(data_holdout$price_numeric)
-sqrt(sum((predictions_holdout-data_holdout$price_numeric)^2))
+# Print or check the predictions for the holdout
+predictions_holdout <- predict(lasso_model, data_holdout)
 # look at holdout RMSE
-# look at holdout RMSE
-model1_level_holdout_rmse <- mse_lev(predict(model1_level, newdata = data_holdout), data_holdout[,"price_numeric"] %>% pull)**(1/2)
-model1_level_holdout_rmse
+model1_rmse <- sqrt(sum((predictions_holdout-data_holdout$price_numeric)^2))
+model1_rmse
+# strange it is too large (it seems we are overfitting)
+
 
 #### Second model: Random Forest #####
 
+# do 5-fold CV
+train_control <- trainControl(method = "cv",
+                              number = 5,
+                              verboseIter = FALSE)
+
+
+# set tuning
+tune_grid <- expand.grid(
+  .mtry = c(5, 7, 9),
+  .splitrule = "variance",
+  .min.node.size = c(5, 10)
+)
+
+
+# simpler model for model A (1)
+set.seed(1234)
+system.time({
+  rf_model_1 <- train(
+    formula,
+    data = data_work,
+    method = "ranger",
+    trControl = train_control,
+    tuneGrid = tune_grid,
+    importance = "impurity"
+  )
+})
+rf_model_1
+
+summary(rf_model_1)
+
+data_holdout_w_prediction <- data_holdout %>%
+  mutate(predicted_price = predict(rf_model_1, newdata = data_holdout))
+model2_rmse <- sqrt(sum((data_holdout_w_prediction$predicted_price-data_holdout_w_prediction$price_numeric)^2))
+model2_rmse
+
 #### Third model: Boosting #####
+gbm_grid <-  expand.grid(interaction.depth = c(1, 5, 10), # complexity of the tree
+                         n.trees = (4:10)*50, # number of iterations, i.e. trees
+                         shrinkage = 0.1, # learning rate: how quickly the algorithm adapts
+                         n.minobsinnode = 20 # the minimum number of training set samples in a node to commence splitting
+)
+
+
+set.seed(1234)
+system.time({
+  gbm_model <- train(formula,
+                     data = data_work,
+                     method = "gbm",
+                     trControl = train_control,
+                     verbose = FALSE,
+                     tuneGrid = gbm_grid)
+})
+gbm_model
 
 #=================== Task 2 =====================
 # now we compare the model performance 
 
 #=================== Task 3 =====================
 ##### Shapley values #####
+install.packages("devtools")
+devtools::install_github('ModelOriented/treeshap')
+install.packages("cli")
+library(cli)
+library(treeshap)
+
+#define one-hot encoding function
+dummy <- dummyVars(" ~ .", data=data_holdout, fullRank=T, sep = NULL)
+
+#perform one-hot encoding on data frame
+data_holdout_ohe <- data.frame(predict(dummy, newdata=data_holdout))
+
+# replace "." character to " " to match model object names
+names(data_holdout_ohe) <- gsub(x = names(data_holdout_ohe),
+                                pattern = "\\.", 
+                                replacement = " ")  
+
+# unify model for treeshap
+rf_model_unified <- ranger.unify(rf_model_1$finalModel, data_holdout_ohe)
+
+treeshap_res <- treeshap(rf_model_unified, data_holdout_ohe[1:500, ])
+
+
+## Download treeshap_fit.rds from OSF: https://osf.io/6p7r8
+treeshap_res %>% write_rds("ch16-airbnb-random-forest/treeshap_fit.rds")
+
+plot_contribution(treeshap_res, obs = 12)
+
+plot_feature_importance(treeshap_res, max_vars = 10)
+
+
+treeshap_inter <- treeshap(rf_model_unified, data_holdout_ohe[1:100, ], interactions = T)
