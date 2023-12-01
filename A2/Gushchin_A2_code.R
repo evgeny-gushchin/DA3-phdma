@@ -764,8 +764,13 @@ system.time({
 })
 gbm_model
 
+data_holdout_w_prediction_new <- data_holdout %>%
+  mutate(predicted_price = predict(gbm_model, newdata = data_holdout))
+model3_rmse <- sqrt(sum((data_holdout_w_prediction_new$predicted_price-data_holdout_w_prediction_new$price_numeric)^2))
+model3_rmse
+
 #=================== Task 2 =====================
-# now we compare the model performance 
+# now we compare the model performance between two different dates
 
 #=================== Task 3 =====================
 ##### Shapley values #####
@@ -776,10 +781,10 @@ library(cli)
 library(treeshap)
 
 #define one-hot encoding function
-dummy <- dummyVars(" ~ .", data=data_holdout, fullRank=T, sep = NULL)
+dummy <- dummyVars(" ~ .", data=data_holdout$accommodates, fullRank=T, sep = NULL)
 
 #perform one-hot encoding on data frame
-data_holdout_ohe <- data.frame(predict(dummy, newdata=data_holdout))
+data_holdout_ohe <- data.frame(predict(dummy, newdata=data_holdout$accommodates))
 
 # replace "." character to " " to match model object names
 names(data_holdout_ohe) <- gsub(x = names(data_holdout_ohe),
@@ -801,3 +806,16 @@ plot_feature_importance(treeshap_res, max_vars = 10)
 
 
 treeshap_inter <- treeshap(rf_model_unified, data_holdout_ohe[1:100, ], interactions = T)
+
+#From Chat GPT
+# Assuming data_holdout is your holdout dataset
+observation_to_visualize <- data_holdout[26, , drop = FALSE]  # Replace 1 with the index of the observation you want to visualize
+
+# Compute Shapley values
+shap_values <- treeshap(rf_model_1, observation_to_visualize, type = "shapley")
+
+unified_model <- xgboost.unify(xgb_model, as.matrix(data))
+treeshap1 <- treeshap(unified_model, head(data, 3))
+plot_contribution(treeshap1, obs = 1)
+treeshap1$shaps
+
