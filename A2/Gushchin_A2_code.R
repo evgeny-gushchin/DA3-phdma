@@ -103,10 +103,6 @@ g1
 ggsave("Neighbourhood and price.png", g1, width = 8, height = 6, dpi = 300)
 # neighbourhood_cleansed is an important variable but we need to find ways to unite some groups or to make it continuous (mean income level?)
 
-# I don't think I need latitude and longitude as I already have neighbourhoods and I don't do the mapping
-#data <- data %>% select(-c(latitude, longitude))
-#data %>% glimpse()
-
 #table(data$room_type) # this variable was used for filtering
 
 table(data$property_type) # also was used for filtering but there are several groups left, that mey be helpful for prediction
@@ -310,7 +306,7 @@ X2  <- c("accommodates*wifi", "property_type*wifi")
 smp_size <- floor(0.2 * nrow(data))
 
 # Set the random number generator: It will make results reproducable
-#set.seed(20180123)
+set.seed(20123)
 
 # create ids:
 # 1) seq_len: generate regular sequences
@@ -457,7 +453,7 @@ holdout_rmse <- c(model1_rmse, model2_rmse, model3_rmse)
 # all results in one table
 main_table <- data.frame(rbind(insample_rmse, holdout_rmse))
 colnames(main_table)<-c("Lasso", "Random Forest", "Boosting")
-row.names(main_table) <- c("RMSE (insample)", "RMSE (holdout)")
+row.names(main_table) <- c("RMSE (mean 5-fold CV)", "RMSE (holdout)")
 main_table
 
 stargazer(main_table, summary = F, digits=1, float=F, out="A1-results-table-Gushchin.tex")
@@ -465,7 +461,7 @@ stargazer(main_table, summary = F, digits=1, float=F, type="text",  out="A1-resu
 
 #=================== Task 2 =====================
 # now we compare the model performance between two different dates
-# first train the GBM model on full data listings_Vienna_09_2023.csv
+# first train the RF model on full data listings_Vienna_09_2023.csv
 
 set.seed(1234)
 system.time({
@@ -636,25 +632,51 @@ model3_rmse
 #install.packages("devtools")
 #devtools::install_github('ModelOriented/treeshap')
 #install.packages("cli")
+install.packages("ranger")
 library(cli)
 library(treeshap)
 
+# Assuming data_holdout is your data frame
+factor_vars_less_than_2_levels <- sapply(data_holdout, function(x) is.factor(x) && length(levels(x)) < 2)
+
+# Extract the names of factor variables with less than 2 levels
+factor_vars_names_less_than_2_levels <- names(factor_vars_less_than_2_levels[factor_vars_less_than_2_levels])
+
+# Print the result
+print(factor_vars_names_less_than_2_levels)
+data_holdout <- data_holdout %>% select(-c(bathrooms_text_flag))
 #define one-hot encoding function
-dummy <- dummyVars(" ~ .", data=data_holdout$accommodates, fullRank=T, sep = NULL)
+dummy <- dummyVars(" ~ .", data=data_holdout, fullRank=T, sep = NULL)
 
 #perform one-hot encoding on data frame
-data_holdout_ohe <- data.frame(predict(dummy, newdata=data_holdout$accommodates))
+data_holdout_ohe <- data.frame(predict(dummy, newdata=data_holdout))
 
 # replace "." character to " " to match model object names
 names(data_holdout_ohe) <- gsub(x = names(data_holdout_ohe),
                                 pattern = "\\.", 
                                 replacement = " ")  
 
+# Check feature names in the model
+model_features <- colnames(rf_model_1$finalModel$forest$data)
+
+# Check feature names in the dataset
+data_features <- colnames(data_holdout_ohe)
+
+# Compare
+setdiff(model_features, data_features)
+data_holdout_ohe <- data_holdout_ohe[, model_features]
+
+# Check for missing features
+missing_features <- setdiff(model_features, data_features)
+
+# If there are missing features, add them to the dataset
+if (length(missing_features) > 0) {
+  data_holdout_ohe[, missing_features] <- 0  # or any default value
+}
 # unify model for treeshap
 rf_model_unified <- ranger.unify(rf_model_1$finalModel, data_holdout_ohe)
 
 treeshap_res <- treeshap(rf_model_unified, data_holdout_ohe[1:500, ])
-
 
 ## Download treeshap_fit.rds from OSF: https://osf.io/6p7r8
 treeshap_res %>% write_rds("ch16-airbnb-random-forest/treeshap_fit.rds")
