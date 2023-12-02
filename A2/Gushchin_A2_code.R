@@ -62,23 +62,44 @@ data$price_numeric <- as.numeric(data$price_cleaned)
 print(data$price_numeric[1]) # done!
 
 summary(data$price_numeric)
+# we need to treat the outliers 
+lower_limit <- 30
+upper_limit <- 400
+
+sum(data$price_numeric > upper_limit)
+sum(data$price_numeric < lower_limit)
+(sum(data$price_numeric > upper_limit) + sum(data$price_numeric < lower_limit))/dim(data)[1]
+#So there are 1.75% of observations that are less than 30 dollars per day and more than 400 dollars.
+# lets windsorize these observations and create dummies
+data$outlier_high = 0
+data$outlier_low = 0
+data$outlier_low[data$price_numeric < lower_limit] = 1
+data$outlier_high[data$price_numeric > upper_limit] = 1
+table(data$outlier_high)
+data$price_numeric[data$price_numeric < lower_limit] = lower_limit
+data$price_numeric[data$price_numeric > upper_limit] = upper_limit
 
 # some columns we can drop because they don't carry any important information for our task
 # listing_url, scrape_id, picture_url, host_url, host_picture_url, host_thumbnail_url
 # Variables $name, $description, $neighborhood_overview, $host_about require text analysis
 # will not use them because of the time constraint
 #data <- data %>% select(-c(listing_url, scrape_id, picture_url, host_url, host_picture_url, host_thumbnail_url, price, id, last_scraped, name, description, neighborhood_overview, host_about, host_id, host_name, host_since, host_location, ))
-data <- data %>% select(c(price_numeric, neighbourhood_cleansed,property_type,accommodates, bathrooms_text,bedrooms, beds, amenities)) 
+data <- data %>% select(c(outlier_low, outlier_high, price_numeric, neighbourhood_cleansed,property_type,accommodates, bathrooms_text,bedrooms, beds, amenities)) 
 data %>% glimpse() 
 
 table(data$neighbourhood_cleansed) # this one is much cleaner than neighbourhood, better to use it
-g1 <- ggplot(data, aes(x = factor(neighbourhood_cleansed), y = price_numeric,
-)) +
-  geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
-  stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
-  labs(x = "Neighbourhood",y = "Apartment price")+
-  scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))+
-  theme_minimal()
+#clean the titles of the districts
+data$neighbourhood_cleansed[data$neighbourhood_cleansed == "Rudolfsheim-F\u009fnfhaus"] = "Rudolfsheim-Fünfhaus"
+data$neighbourhood_cleansed[data$neighbourhood_cleansed == "W\u008ahring"] = "Währing"
+data$neighbourhood_cleansed[data$neighbourhood_cleansed == "Landstra§e"] = "Landstraße"
+data$neighbourhood_cleansed[data$neighbourhood_cleansed == "D\u009abling"] = "Döbling"
+g1 <- ggplot(data, aes(x = factor(neighbourhood_cleansed), y = price_numeric)) +
+  geom_boxplot(alpha = 0.8, na.rm = TRUE, outlier.shape = NA, width = 0.8, fill = "lightblue") +
+  stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm = TRUE) +
+  labs(x = "Neighbourhood", y = "Apartment price") +
+  scale_y_continuous(expand = c(0.01, 0.01), limits = c(0, 200), breaks = seq(0, 200, 20)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 g1
 # neighbourhood_cleansed is an important variable but we need to find ways to unite some groups or to make it continuous (mean income level?)
 
@@ -91,7 +112,7 @@ g1
 table(data$property_type) # also was used for filtering but there are several groups left, that mey be helpful for prediction
 g2 <- ggplot(data, aes(x = factor(property_type), y = price_numeric,
 )) +
-  geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
+  geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8,fill = "lightgreen") +
   stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
   labs(x = "Property type",y = "Apartment price")+
   scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))+
@@ -102,7 +123,7 @@ g2
 summary(data$accommodates)
 g3 <- ggplot(data, aes(x = factor(accommodates), y = price_numeric,
 )) +
-  geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
+  geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8, fill = "orange") +
   stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
   labs(x = "How many people can live",y = "Apartment price")+
   scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))+
@@ -111,14 +132,6 @@ g3
 # accommodates is a very important variable (a proxy for apartment size)
 
 table(data$bathrooms_text)
-g4 <- ggplot(data, aes(x = factor(bathrooms_text), y = price_numeric,
-)) +
-  geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
-  stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
-  labs(x = "How many bathrooms",y = "Apartment price")+
-  scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))+
-  theme_minimal()
-g4
 # bathrooms_text also important (can try making it continuous)
 data <- data %>% mutate(bathroom = ifelse(bathrooms_text == "0 baths", 0, 
                                    ifelse(bathrooms_text == "Half-bath", 0.5, 
@@ -126,17 +139,33 @@ data <- data %>% mutate(bathroom = ifelse(bathrooms_text == "0 baths", 0,
                                    ifelse(bathrooms_text == "1.5 baths", 1.5, 
                                    ifelse(bathrooms_text == "2 baths", 2,
                                    ifelse(bathrooms_text == "2.5 baths", 2.5,
-                                   ifelse(bathrooms_text == "3 baths", 3,3.5 ))))))))
+                                   ifelse(bathrooms_text == "3 baths", 3,
+                                   ifelse(bathrooms_text == "3.5 baths", 3.5,
+                                   ifelse(bathrooms_text == "4 baths", 4,
+                                   ifelse(bathrooms_text == "4.5 baths", 4.5,5 )))))))))))
 table(data$bathroom) #will use this variable
+g4 <- ggplot(data, aes(x = factor(bathroom), y = price_numeric,
+)) +
+  geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8, fill = "yellow") +
+  stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
+  labs(x = "How many bathrooms",y = "Apartment price")+
+  scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))+
+  theme_minimal()
+g4
 
 table(data$bedrooms) 
 # lets regard NAs as zeros
 data$bedrooms_flag <- 0
 data$bedrooms_flag[is.na(data$bedrooms)] <- 1 #creating a flag variable
 data$bedrooms[is.na(data$bedrooms)] <- 0
+# having more than 4 bedrooms doesn't make sense because we have apartments that accomodate up to 6 people
+# lets put a flag a change these values
+#data$bedrooms_outlier_flag = 0
+#data$bedrooms_outlier_flag[data$bedrooms >4] == 1
+#data$bedrooms[data$bedrooms >4] = 4
 g5 <- ggplot(data, aes(x = factor(bedrooms), y = price_numeric,
 )) +
-  geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
+  geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8, fill = "grey") +
   stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
   labs(x = "Bedrooms",y = "Apartment price")+
   scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))+
@@ -149,9 +178,14 @@ table(data$beds)
 data$beds_flag <- 0
 data$beds_flag[is.na(data$beds)] <- 1 #creating a flag variable
 data$beds[is.na(data$beds)] <- 0
+# again more than 6 beds is strange
+# lets put a flag a change these values to 6
+#data$beds_outlier_flag = 0
+#data$beds_outlier_flag[data$beds >6] == 1
+#data$beds[data$beds >6] = 6
 g6 <- ggplot(data, aes(x = factor(beds), y = price_numeric,
 )) +
-  geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
+  geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8, fill = "pink") +
   stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
   labs(x = "Beds",y = "Apartment price")+
   scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))+
@@ -166,26 +200,9 @@ print(data$amenities[1])
 # also the total size of amenity list can be an important variable
 data$TV <- ifelse(grepl("TV", data$amenities, ignore.case = TRUE), 1, 0)
 table(data$TV) 
-g7 <- ggplot(data, aes(x = factor(TV), y = price_numeric,
-)) +
-  geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
-  stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
-  labs(x = "TV",y = "Apartment price")+
-  scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))+
-  theme_minimal()
-g7
 
 data$wifi <- ifelse(grepl("Wifi", data$amenities, ignore.case = TRUE), 1, 0)
 table(data$wifi) # very few don't have wifi
-g8 <- ggplot(data, aes(x = factor(wifi), y = price_numeric,
-)) +
-  geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
-  stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
-  labs(x = "Wifi",y = "Apartment price")+
-  scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))+
-  theme_minimal()
-g8
-# wifi does seem important
 
 data$dishwasher <- ifelse(grepl("Dishwasher", data$amenities, ignore.case = TRUE), 1, 0)
 table(data$dishwasher) 
@@ -208,6 +225,12 @@ table(data$fridge)
 data$bathtub <- ifelse(grepl("Bathtub", data$amenities, ignore.case = TRUE), 1, 0)
 table(data$bathtub) 
 
+data$kitchen <- ifelse(grepl("kitchen", data$amenities, ignore.case = TRUE), 1, 0)
+table(data$kitchen) 
+
+data$pool <- ifelse(grepl("pool", data$amenities, ignore.case = TRUE), 1, 0)
+table(data$pool) 
+
 #help of Chat GPT#
 # Create new variable amenity_length
 data$amenity_length <- str_count(data$amenities, ",")
@@ -215,58 +238,50 @@ data$amenity_length <- str_count(data$amenities, ",")
 data$amenity_length <- data$amenity_length + 1
 
 summary(data$amenity_length) 
-g9 <- ggplot(data, aes(x = factor(amenity_length), y = price_numeric,
-)) +
-  geom_boxplot(alpha=0.8, na.rm=T, outlier.shape = NA, width = 0.8) +
-  stat_boxplot(geom = "errorbar", width = 0.8, size = 0.3, na.rm=T)+
-  labs(x = "Number of amenities",y = "Apartment price")+
-  scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))+
-  theme_minimal()
-g9
+
+g7 <- ggplot(data, aes(x = amenity_length, y = price_numeric, color = factor(accommodates))) + 
+  geom_point(alpha = 0.1) +
+  theme_minimal() +
+  labs(x = "Number of amenities", y = "Apartment price", color = "Accommodates") +
+  geom_smooth(method = "lm", formula = y ~ poly(x, 1), se = FALSE, alpha = 0.1, linetype = "dashed")
+g7
 # amenity_length seems to be important (continuous) 
 
 # List of column names you want to convert to factors
-columns_to_factor <- c("neighbourhood_cleansed", "property_type", "wifi", "TV", "dishwasher", "coffeemaker", "aircon", "microwave", "heating", "fridge", "bathtub", "bedrooms_flag", "beds_flag")
+columns_to_factor <- c("neighbourhood_cleansed", "property_type", "wifi", "TV", "dishwasher", "coffeemaker", "aircon", "microwave", "heating", "fridge", "bathtub", "kitchen", "pool", "bedrooms_flag", "beds_flag", "outlier_high", "outlier_low") #"bedrooms_outlier_flag", "beds_outlier_flag",
 
 # Use lapply to apply as.factor to the specified columns
 data[columns_to_factor] <- lapply(data[columns_to_factor], as.factor)
 data %>% glimpse()
 data <- data %>% mutate(accommodates_sq = accommodates^2, bathroom_sq = bathroom^2, beds_sq = beds^2, bedrooms_sq = bedrooms^2, amenity_length_sq = amenity_length^2) 
 data <- data %>% mutate(accommodates_cub = accommodates^3, bathroom_cub = bathroom^3, beds_cub = beds^3, bedrooms_cub = bedrooms^3, amenity_length_cub = amenity_length^3) 
-data <- data %>% mutate(accommodates_log = log(accommodates), bathroom_log = log(bathroom), beds_log = log(beds), bedrooms_log = log(bedrooms), amenity_length_log = log(amenity_length)) 
+data <- data %>% mutate(accommodates_log = log(accommodates), amenity_length_log = log(amenity_length)) 
 
-continuous_vars <- c("accommodates","accommodates_sq","accommodates_cub","accommodates_log","bathroom","bathroom_sq","bathroom_cub", "bathroom_log","beds","beds_sq", "beds_cub", "beds_log","bedrooms","bedrooms_sq", "bedrooms_cub","bedrooms_log", "amenity_length", "amenity_length_sq", "amenity_length_cub", "amenity_length_log") 
-
+continuous_vars <- c("accommodates","accommodates_sq", "accommodates_cub", "accommodates_log","bathroom","bathroom_sq", "bathroom_cub", "beds","beds_sq", "beds_cub", "bedrooms","bedrooms_sq", "bedrooms_cub", "amenity_length", "amenity_length_sq", "amenity_length_cub",  "amenity_length_log") 
 #Look up property type interactions
 
-# NB all graphs, we exclude  extreme values of price
-datau <- subset(data, price_numeric<400)
 # Create a scatter plot with color-coded points
-ggplot(datau, aes(x = as.factor(accommodates), y = price_numeric, color = property_type)) +
-  geom_boxplot(position = position_dodge(width = 0.8), alpha = 0.5) +
+ggplot(data, aes(x = as.factor(accommodates), y = price_numeric, color = property_type)) +
+  geom_boxplot(position = position_dodge(width = 0.8), alpha = 0.5, outlier.shape = NA) +
   labs(x = "Accommodates",
        y = "Price Numeric") +
   theme_minimal()
 
-ggplot(datau, aes(x = as.factor(accommodates), y = price_numeric, color = wifi)) +
-  geom_boxplot(position = position_dodge(width = 0.8), alpha = 0.5) +
+ggplot(data, aes(x = as.factor(accommodates), y = price_numeric, color = wifi)) +
+  geom_boxplot(position = position_dodge(width = 0.8), alpha = 0.5, outlier.shape = NA) +
   labs(x = "Accommodates",
        y = "Price Numeric") +
   theme_minimal()
 
-ggplot(datau, aes(x = property_type, y = price_numeric, color = wifi)) +
-  geom_boxplot(position = position_dodge(width = 0.8), alpha = 0.5) +
+ggplot(data, aes(x = property_type, y = price_numeric, color = wifi)) +
+  geom_boxplot(position = position_dodge(width = 0.8), alpha = 0.5, outlier.shape = NA) +
   labs(x = "Property type",
        y = "Price Numeric") +
   theme_minimal()
 
 # dummies suggested by graphs
-X1  <- c("f_room_type*f_property_type",  "f_room_type*d_familykidfriendly")
-
-# Additional interactions of factors and dummies
-X2  <- c("d_airconditioning*f_property_type", "d_cats*f_property_type", "d_dogs*f_property_type")
-X3  <- c(paste0("(f_property_type + f_room_type + f_cancellation_policy + f_bed_type) * (",
-                paste(amenities, collapse=" + "),")"))
+X1  <- c("accommodates*property_type")
+X2  <- c("accommodates*wifi", "property_type*wifi")
 
 #################################
 # Separate hold-out set #
@@ -276,7 +291,7 @@ X3  <- c(paste0("(f_property_type + f_room_type + f_cancellation_policy + f_bed_
 smp_size <- floor(0.2 * nrow(data))
 
 # Set the random number generator: It will make results reproducable
-set.seed(20180123)
+#set.seed(20180123)
 
 # create ids:
 # 1) seq_len: generate regular sequences
@@ -292,17 +307,16 @@ data_holdout <- data %>% filter(holdout == 1)
 data_work <- data %>% filter(holdout == 0)
 
 #### First model: OLS + Lasso #####
-# take model 8 (and find observations where there is no missing data)may
-#vars_model_7 <- c("price_numeric", continuous_vars)
-vars_model_1 <- c("price_numeric", continuous_vars, columns_to_factor)
+vars_model_with_inter <- c("price_numeric", continuous_vars, columns_to_factor, X1, X2)
+vars_model_without_inter <- c("price_numeric", continuous_vars, columns_to_factor)
 
 # Set lasso tuning parameters
 n_folds=5
 train_control <- trainControl(method = "cv", number = n_folds)
 tune_grid <- expand.grid("alpha" = c(1), "lambda" = seq(0.05, 1, by = 0.05))
 
-# We use model 7 without the interactions so that it is easy to compare later to post lasso ols
-formula <- formula(paste0("price_numeric ~ ", paste(setdiff(vars_model_1, "price_numeric"), collapse = " + ")))
+formula <- formula(paste0("price_numeric ~ ", paste(setdiff(vars_model_with_inter, "price_numeric"), collapse = " + ")))
+formula_alt <- formula(paste0("price_numeric ~ ", paste(setdiff(vars_model_without_inter, "price_numeric"), collapse = " + ")))
 
 set.seed(1234)
 lasso_model <- caret::train(formula,
@@ -344,9 +358,9 @@ model1_rmse
 #### Second model: Random Forest #####
 
 # do 5-fold CV
-train_control <- trainControl(method = "cv",
-                              number = 5,
-                              verboseIter = FALSE)
+#train_control <- trainControl(method = "cv",
+#                              number = 5,
+#                              verboseIter = FALSE)
 
 
 # set tuning
@@ -361,7 +375,7 @@ tune_grid <- expand.grid(
 set.seed(1234)
 system.time({
   rf_model_1 <- train(
-    formula,
+    formula_alt,
     data = data_work,
     method = "ranger",
     trControl = train_control,
@@ -370,6 +384,9 @@ system.time({
   )
 })
 rf_model_1
+rf_model_1$bestTune
+final_rf_rmse <- rf_model_1$results$RMSE[which.min(rf_model_1$results$RMSE)]
+final_rf_rmse
 
 summary(rf_model_1)
 
@@ -388,7 +405,7 @@ gbm_grid <-  expand.grid(interaction.depth = c(1, 5, 10), # complexity of the tr
 
 set.seed(1234)
 system.time({
-  gbm_model <- train(formula,
+  gbm_model <- train(formula_alt,
                      data = data_work,
                      method = "gbm",
                      trControl = train_control,
@@ -396,11 +413,28 @@ system.time({
                      tuneGrid = gbm_grid)
 })
 gbm_model
+gbm_model$bestTune
+
+# Extracting the final RMSE
+final_gbm_rmse <- gbm_model$results$RMSE[which.min(gbm_model$results$RMSE)]
+final_gbm_rmse
 
 data_holdout_w_prediction_new <- data_holdout %>%
   mutate(predicted_price = predict(gbm_model, newdata = data_holdout))
 model3_rmse <- sqrt(sum((data_holdout_w_prediction_new$predicted_price-data_holdout_w_prediction_new$price_numeric)^2))
 model3_rmse
+
+insample_rmse <- c(lasso_cv_rmse[1, 1], final_rf_rmse, final_gbm_rmse)
+holdout_rmse <- c(model1_rmse, model2_rmse, model3_rmse)
+# all results in one table
+main_table <- data.frame(rbind(insample_rmse, holdout_rmse))
+colnames(main_table)<-c("Lasso", "Random Forest", "Boosting")
+row.names(main_table) <- c("RMSE (insample)", "RMSE (holdout)")
+main_table
+
+stargazer(main_table, summary = F, digits=1, float=F, out="A1-results-table-Gushchin.tex")
+stargazer(main_table, summary = F, digits=1, float=F, type="text",  out="A1-results-table-Gushchin.tex")
+
 
 #=================== Task 2 =====================
 # now we compare the model performance between two different dates
