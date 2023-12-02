@@ -101,6 +101,7 @@ g1 <- ggplot(data, aes(x = factor(neighbourhood_cleansed), y = price_numeric)) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 g1
+ggsave("Neighbourhood and price.png", g1, width = 8, height = 6, dpi = 300)
 # neighbourhood_cleansed is an important variable but we need to find ways to unite some groups or to make it continuous (mean income level?)
 
 # I don't think I need latitude and longitude as I already have neighbourhoods and I don't do the mapping
@@ -118,6 +119,8 @@ g2 <- ggplot(data, aes(x = factor(property_type), y = price_numeric,
   scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))+
   theme_minimal()
 g2
+ggsave("Property type and price.png", g2, width = 8, height = 6, dpi = 300)
+
 # property_type seems relevant
 
 summary(data$accommodates)
@@ -129,6 +132,8 @@ g3 <- ggplot(data, aes(x = factor(accommodates), y = price_numeric,
   scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))+
   theme_minimal()
 g3
+ggsave("How many people can live and price.png", g3, width = 8, height = 6, dpi = 300)
+
 # accommodates is a very important variable (a proxy for apartment size)
 
 table(data$bathrooms_text)
@@ -152,6 +157,7 @@ g4 <- ggplot(data, aes(x = factor(bathroom), y = price_numeric,
   scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))+
   theme_minimal()
 g4
+ggsave("Bathrooms and price.png", g4, width = 8, height = 6, dpi = 300)
 
 table(data$bedrooms) 
 # lets regard NAs as zeros
@@ -171,6 +177,8 @@ g5 <- ggplot(data, aes(x = factor(bedrooms), y = price_numeric,
   scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))+
   theme_minimal()
 g5
+ggsave("Bedrooms and price.png", g5, width = 8, height = 6, dpi = 300)
+
 # bedrooms seems important (continuous)
 
 table(data$beds) 
@@ -191,6 +199,7 @@ g6 <- ggplot(data, aes(x = factor(beds), y = price_numeric,
   scale_y_continuous(expand = c(0.01,0.01), limits=c(0, 200), breaks = seq(0,200, 20))+
   theme_minimal()
 g6
+ggsave("Beds and price.png", g6, width = 8, height = 6, dpi = 300)
 
 print(data$amenities[1]) 
 # the variable includes a list of amenities, need text analysis
@@ -245,6 +254,8 @@ g7 <- ggplot(data, aes(x = amenity_length, y = price_numeric, color = factor(acc
   labs(x = "Number of amenities", y = "Apartment price", color = "Accommodates") +
   geom_smooth(method = "lm", formula = y ~ poly(x, 1), se = FALSE, alpha = 0.1, linetype = "dashed")
 g7
+ggsave("Number of amenities and price by accommodates.png", g7, width = 8, height = 6, dpi = 300)
+
 # amenity_length seems to be important (continuous) 
 
 # List of column names you want to convert to factors
@@ -261,23 +272,29 @@ continuous_vars <- c("accommodates","accommodates_sq", "accommodates_cub", "acco
 #Look up property type interactions
 
 # Create a scatter plot with color-coded points
-ggplot(data, aes(x = as.factor(accommodates), y = price_numeric, color = property_type)) +
+g8<-ggplot(data, aes(x = as.factor(accommodates), y = price_numeric, color = property_type)) +
   geom_boxplot(position = position_dodge(width = 0.8), alpha = 0.5, outlier.shape = NA) +
   labs(x = "Accommodates",
        y = "Price Numeric") +
   theme_minimal()
+g8
+ggsave("Accommodates and price by property type.png", g8, width = 8, height = 6, dpi = 300)
 
-ggplot(data, aes(x = as.factor(accommodates), y = price_numeric, color = wifi)) +
+g9 <- ggplot(data, aes(x = as.factor(accommodates), y = price_numeric, color = wifi)) +
   geom_boxplot(position = position_dodge(width = 0.8), alpha = 0.5, outlier.shape = NA) +
   labs(x = "Accommodates",
        y = "Price Numeric") +
   theme_minimal()
+g9
+ggsave("Accommodates and price by wifi.png", g9, width = 8, height = 6, dpi = 300)
 
-ggplot(data, aes(x = property_type, y = price_numeric, color = wifi)) +
+g10 <- ggplot(data, aes(x = property_type, y = price_numeric, color = wifi)) +
   geom_boxplot(position = position_dodge(width = 0.8), alpha = 0.5, outlier.shape = NA) +
   labs(x = "Property type",
        y = "Price Numeric") +
   theme_minimal()
+g10
+ggsave("Property type and price by wifi.png", g10, width = 8, height = 6, dpi = 300)
 
 # dummies suggested by graphs
 X1  <- c("accommodates*property_type")
@@ -354,12 +371,13 @@ model1_rmse <- sqrt(sum((data_holdout$predictions-data_holdout$price_numeric)^2)
 model1_rmse
 # strange it is too large (it seems we are overfitting)
 
-g8 <- ggplot(data_holdout, aes(x = predictions, y = price_numeric)) + 
+g11 <- ggplot(data_holdout, aes(x = predictions, y = price_numeric)) + 
   geom_point(alpha = 0.1) +
   theme_minimal() +
   labs(x = "Predictions", y = "Apartment price")+
   geom_smooth(method = "lm", formula = y ~ poly(x, 1), se = FALSE, alpha = 0.1, linetype = "dashed")
-g8
+g11
+ggsave("Prediction errors.png", g11, width = 8, height = 6, dpi = 300)
 
 #### Second model: Random Forest #####
 
