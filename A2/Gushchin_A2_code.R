@@ -675,6 +675,7 @@ if (length(missing_features) > 0) {
 }
 # unify model for treeshap
 rf_model_unified <- ranger.unify(rf_model_1$finalModel, data_holdout_ohe)
+#rf_model_unified <- ranger.unify(rf_model_1$finalModel, as.data.frame(data_holdout_ohe))
 
 treeshap_res <- treeshap(rf_model_unified, data_holdout_ohe[1:500, ])
 
