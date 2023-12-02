@@ -46,12 +46,11 @@ data %>% glimpse()
 ##### data processing & feature engineering ######
 summary(data$accommodates) 
 data <- data %>% filter(accommodates<7 & accommodates>1)
-summary(data$accommodates) # now we have the data for places that can accomodate 2-6 people
+summary(data$accommodates) # now we have the data for places that can accommodate 2-6 people
 
 data <- data %>% filter(room_type=="Entire home/apt") # because we are interested only in apartments
 data %>% glimpse() # now we are down to 10,409 observations
 
-table(data$property_type)
 data <- data %>% filter(property_type=="Entire loft" | property_type=="Entire serviced apartment" | property_type=="Entire rental unit" | property_type=="Entire place") # these seem filter out non-apartments
 data %>% glimpse() # now we are down to 9,233 observations
 
@@ -65,26 +64,26 @@ summary(data$price_numeric)
 # we need to treat the outliers 
 lower_limit <- 30
 upper_limit <- 400
-
-sum(data$price_numeric > upper_limit)
-sum(data$price_numeric < lower_limit)
-(sum(data$price_numeric > upper_limit) + sum(data$price_numeric < lower_limit))/dim(data)[1]
-#So there are 1.75% of observations that are less than 30 dollars per day and more than 400 dollars.
+data <- data %>% filter(price_numeric<upper_limit & price_numeric>lower_limit)
+#sum(data$price_numeric > upper_limit)
+#sum(data$price_numeric < lower_limit)
+#(sum(data$price_numeric > upper_limit) + sum(data$price_numeric < lower_limit))/dim(data)[1]
+#So there are 1.75% of observations that are less than 30 dollars per day or more than 400 dollars.
 # lets windsorize these observations and create dummies
-data$outlier_high = 0
-data$outlier_low = 0
-data$outlier_low[data$price_numeric < lower_limit] = 1
-data$outlier_high[data$price_numeric > upper_limit] = 1
-table(data$outlier_high)
-data$price_numeric[data$price_numeric < lower_limit] = lower_limit
-data$price_numeric[data$price_numeric > upper_limit] = upper_limit
+#data$outlier_high = 0
+#data$outlier_low = 0
+#data$outlier_low[data$price_numeric < lower_limit] = 1
+#data$outlier_high[data$price_numeric > upper_limit] = 1
+#table(data$outlier_high)
+#data$price_numeric[data$price_numeric < lower_limit] = lower_limit
+#data$price_numeric[data$price_numeric > upper_limit] = upper_limit
 
 # some columns we can drop because they don't carry any important information for our task
 # listing_url, scrape_id, picture_url, host_url, host_picture_url, host_thumbnail_url
 # Variables $name, $description, $neighborhood_overview, $host_about require text analysis
 # will not use them because of the time constraint
 #data <- data %>% select(-c(listing_url, scrape_id, picture_url, host_url, host_picture_url, host_thumbnail_url, price, id, last_scraped, name, description, neighborhood_overview, host_about, host_id, host_name, host_since, host_location, ))
-data <- data %>% select(c(outlier_low, outlier_high, price_numeric, neighbourhood_cleansed,property_type,accommodates, bathrooms_text,bedrooms, beds, amenities)) 
+data <- data %>% select(c(price_numeric, neighbourhood_cleansed,property_type,accommodates, bathrooms_text,bedrooms, beds, amenities)) 
 data %>% glimpse() 
 
 table(data$neighbourhood_cleansed) # this one is much cleaner than neighbourhood, better to use it
@@ -137,6 +136,9 @@ ggsave("How many people can live and price.png", g3, width = 8, height = 6, dpi 
 # accommodates is a very important variable (a proxy for apartment size)
 
 table(data$bathrooms_text)
+data$bathrooms_text_flag = 0
+data$bathrooms_text_flag[data$bathrooms_text == ""] = 1
+data$bathrooms_text[data$bathrooms_text == ""] = "0 baths"
 # bathrooms_text also important (can try making it continuous)
 data <- data %>% mutate(bathroom = ifelse(bathrooms_text == "0 baths", 0, 
                                    ifelse(bathrooms_text == "Half-bath", 0.5, 
@@ -259,7 +261,7 @@ ggsave("Number of amenities and price by accommodates.png", g7, width = 8, heigh
 # amenity_length seems to be important (continuous) 
 
 # List of column names you want to convert to factors
-columns_to_factor <- c("neighbourhood_cleansed", "property_type", "wifi", "TV", "dishwasher", "coffeemaker", "aircon", "microwave", "heating", "fridge", "bathtub", "kitchen", "pool", "bedrooms_flag", "beds_flag", "outlier_high", "outlier_low") #"bedrooms_outlier_flag", "beds_outlier_flag",
+columns_to_factor <- c("neighbourhood_cleansed", "property_type", "wifi", "TV", "dishwasher", "coffeemaker", "aircon", "microwave", "heating", "fridge", "bathtub", "kitchen", "pool", "bedrooms_flag", "beds_flag") #"bedrooms_outlier_flag", "beds_outlier_flag", "bathrooms_text_flag"
 
 # Use lapply to apply as.factor to the specified columns
 data[columns_to_factor] <- lapply(data[columns_to_factor], as.factor)
@@ -467,19 +469,21 @@ stargazer(main_table, summary = F, digits=1, float=F, type="text",  out="A1-resu
 
 set.seed(1234)
 system.time({
-  gbm_model2 <- train(formula_alt,
-                     data = data,
-                     method = "gbm",
-                     trControl = train_control,
-                     verbose = FALSE,
-                     tuneGrid = gbm_grid)
+  rf_model_2 <- train(
+    formula_alt,
+    data = data,
+    method = "ranger",
+    trControl = train_control,
+    tuneGrid = tune_grid,
+    importance = "impurity"
+  )
 })
-gbm_model2
-gbm_model2$bestTune
+rf_model_2
+rf_model_2$bestTune
 
 # Extracting the final RMSE
-final_gbm2_rmse <- gbm_model2$results$RMSE[which.min(gbm_model2$results$RMSE)]
-final_gbm2_rmse
+final_rf2_rmse <- rf_model_2$results$RMSE[which.min(rf_model_2$results$RMSE)]
+final_rf2_rmse
 
 # now process the data of listings_Vienna_12_2022.csv
 data_original_old <- read.csv("listings_Vienna_12_2022.csv") # this is the latest data available
@@ -517,8 +521,8 @@ dim(data_old)
 data_old <- data_old %>% filter(price_numeric<upper_limit & price_numeric>lower_limit)
 dim(data_old)
 # lets windsorize these observations and create dummies
-data_old$outlier_high = 0
-data_old$outlier_low = 0
+#data_old$outlier_high = 0
+#data_old$outlier_low = 0
 #data_old$outlier_low[data_old$price_numeric < lower_limit] = 1
 #data_old$outlier_high[data_old$price_numeric > upper_limit] = 1
 #table(data_old$outlier_high)
@@ -541,6 +545,8 @@ data_old$neighbourhood_cleansed[data_old$neighbourhood_cleansed == "Landstra§e"
 data_old$neighbourhood_cleansed[data_old$neighbourhood_cleansed == "D\u009abling"] = "Döbling"
 
 table(data_old$bathrooms_text)
+data_old$bathrooms_text_flag = 0
+data_old$bathrooms_text_flag[data_old$bathrooms_text == ""] = 1
 data_old$bathrooms_text[data_old$bathrooms_text == ""] = "0 baths"
 # bathrooms_text also important (can try making it continuous)
 data_old <- data_old %>% mutate(bathroom = ifelse(bathrooms_text == "0 baths", 0, 
@@ -622,7 +628,7 @@ data_old <- data_old %>% mutate(accommodates_log = log(accommodates), amenity_le
 # now check the model's performance on listings_Vienna_12_2022.csv
 
 data_holdout_w_prediction_old <- data_old %>%
-  mutate(predicted_price = predict(gbm_model2, newdata = data_old))
+  mutate(predicted_price = predict(rf_model_2, newdata = data_old))
 model3_rmse <- sqrt(sum((data_holdout_w_prediction_old$predicted_price-data_holdout_w_prediction_old$price_numeric)^2))
 model3_rmse
 #=================== Task 3 =====================
