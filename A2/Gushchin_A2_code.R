@@ -348,12 +348,18 @@ lasso_cv_rmse <- lasso_model$results %>%
 print(lasso_cv_rmse[1, 1])
 
 # Print or check the predictions for the holdout
-predictions_holdout <- predict(lasso_model, data_holdout)
+data_holdout$predictions <- predict(lasso_model, data_holdout)
 # look at holdout RMSE
-model1_rmse <- sqrt(sum((predictions_holdout-data_holdout$price_numeric)^2))
+model1_rmse <- sqrt(sum((data_holdout$predictions-data_holdout$price_numeric)^2))
 model1_rmse
 # strange it is too large (it seems we are overfitting)
 
+g8 <- ggplot(data_holdout, aes(x = predictions, y = price_numeric)) + 
+  geom_point(alpha = 0.1) +
+  theme_minimal() +
+  labs(x = "Predictions", y = "Apartment price")+
+  geom_smooth(method = "lm", formula = y ~ poly(x, 1), se = FALSE, alpha = 0.1, linetype = "dashed")
+g8
 
 #### Second model: Random Forest #####
 
@@ -424,6 +430,8 @@ data_holdout_w_prediction_new <- data_holdout %>%
 model3_rmse <- sqrt(sum((data_holdout_w_prediction_new$predicted_price-data_holdout_w_prediction_new$price_numeric)^2))
 model3_rmse
 
+
+
 insample_rmse <- c(lasso_cv_rmse[1, 1], final_rf_rmse, final_gbm_rmse)
 holdout_rmse <- c(model1_rmse, model2_rmse, model3_rmse)
 # all results in one table
@@ -435,10 +443,170 @@ main_table
 stargazer(main_table, summary = F, digits=1, float=F, out="A1-results-table-Gushchin.tex")
 stargazer(main_table, summary = F, digits=1, float=F, type="text",  out="A1-results-table-Gushchin.tex")
 
-
 #=================== Task 2 =====================
 # now we compare the model performance between two different dates
+# first train the GBM model on full data listings_Vienna_09_2023.csv
 
+set.seed(1234)
+system.time({
+  gbm_model2 <- train(formula_alt,
+                     data = data,
+                     method = "gbm",
+                     trControl = train_control,
+                     verbose = FALSE,
+                     tuneGrid = gbm_grid)
+})
+gbm_model2
+gbm_model2$bestTune
+
+# Extracting the final RMSE
+final_gbm2_rmse <- gbm_model2$results$RMSE[which.min(gbm_model2$results$RMSE)]
+final_gbm2_rmse
+
+# now process the data of listings_Vienna_12_2022.csv
+data_original_old <- read.csv("listings_Vienna_12_2022.csv") # this is the latest data available
+data_old <- data_original_old %>% select(-c(neighbourhood_group_cleansed, bathrooms, calendar_updated, license))
+data_old %>% glimpse()
+
+##### data processing & feature engineering ######
+summary(data_old$accommodates) 
+data_old <- data_old %>% filter(accommodates<7 & accommodates>1)
+summary(data_old$accommodates) # now we have the data for places that can accommodate 2-6 people
+
+data_old <- data_old %>% filter(room_type=="Entire home/apt") # because we are interested only in apartments
+data_old %>% glimpse() 
+
+table(data_old$property_type)
+data_old <- data_old %>% filter(property_type=="Entire loft" | property_type=="Entire serviced apartment" | property_type=="Entire rental unit" | property_type=="Entire place") # these seem filter out non-apartments
+data_old %>% glimpse() 
+
+print(data_old$price[1]) # we need to clean this variable
+data_old$price_cleaned <- gsub("[^0-9.]", "", data_old$price)
+# Convert to numeric, handle NAs
+data_old$price_numeric <- as.numeric(data_old$price_cleaned)
+print(data_old$price_numeric[1]) # done!
+
+summary(data_old$price_numeric)
+# we need to treat the outliers 
+
+#lets drop the outliers
+
+sum(data_old$price_numeric > upper_limit)
+sum(data_old$price_numeric < lower_limit)
+(sum(data_old$price_numeric > upper_limit) + sum(data_old$price_numeric < lower_limit))/dim(data_old)[1]
+#So there are 2.62% of observations that are less than 30 dollars per day or more than 400 dollars.
+dim(data_old)
+data_old <- data_old %>% filter(price_numeric<upper_limit & price_numeric>lower_limit)
+dim(data_old)
+# lets windsorize these observations and create dummies
+data_old$outlier_high = 0
+data_old$outlier_low = 0
+#data_old$outlier_low[data_old$price_numeric < lower_limit] = 1
+#data_old$outlier_high[data_old$price_numeric > upper_limit] = 1
+#table(data_old$outlier_high)
+#data_old$price_numeric[data_old$price_numeric < lower_limit] = lower_limit
+#data_old$price_numeric[data_old$price_numeric > upper_limit] = upper_limit
+
+# some columns we can drop because they don't carry any important information for our task
+# listing_url, scrape_id, picture_url, host_url, host_picture_url, host_thumbnail_url
+# Variables $name, $description, $neighborhood_overview, $host_about require text analysis
+# will not use them because of the time constraint
+#data <- data %>% select(-c(listing_url, scrape_id, picture_url, host_url, host_picture_url, host_thumbnail_url, price, id, last_scraped, name, description, neighborhood_overview, host_about, host_id, host_name, host_since, host_location, ))
+data_old <- data_old %>% select(c(outlier_low, outlier_high, price_numeric, neighbourhood_cleansed,property_type,accommodates, bathrooms_text,bedrooms, beds, amenities)) 
+data_old %>% glimpse() 
+
+table(data_old$neighbourhood_cleansed) # this one is much cleaner than neighbourhood, better to use it
+#clean the titles of the districts
+data_old$neighbourhood_cleansed[data_old$neighbourhood_cleansed == "Rudolfsheim-F\u009fnfhaus"] = "Rudolfsheim-Fünfhaus"
+data_old$neighbourhood_cleansed[data_old$neighbourhood_cleansed == "W\u008ahring"] = "Währing"
+data_old$neighbourhood_cleansed[data_old$neighbourhood_cleansed == "Landstra§e"] = "Landstraße"
+data_old$neighbourhood_cleansed[data_old$neighbourhood_cleansed == "D\u009abling"] = "Döbling"
+
+table(data_old$bathrooms_text)
+data_old$bathrooms_text[data_old$bathrooms_text == ""] = "0 baths"
+# bathrooms_text also important (can try making it continuous)
+data_old <- data_old %>% mutate(bathroom = ifelse(bathrooms_text == "0 baths", 0, 
+                                          ifelse(bathrooms_text == "Half-bath", 0.5, 
+                                                 ifelse(bathrooms_text == "1 bath", 1, 
+                                                        ifelse(bathrooms_text == "1.5 baths", 1.5, 
+                                                               ifelse(bathrooms_text == "2 baths", 2,
+                                                                      ifelse(bathrooms_text == "2.5 baths", 2.5,
+                                                                             ifelse(bathrooms_text == "3 baths", 3,
+                                                                                    ifelse(bathrooms_text == "3.5 baths", 3.5,
+                                                                                           ifelse(bathrooms_text == "4 baths", 4,
+                                                                                                  ifelse(bathrooms_text == "4.5 baths", 4.5,5 )))))))))))
+table(data_old$bathroom) #will use this variable
+
+table(data_old$bedrooms) 
+# lets regard NAs as zeros
+data_old$bedrooms_flag <- 0
+data_old$bedrooms_flag[is.na(data_old$bedrooms)] <- 1 #creating a flag variable
+data_old$bedrooms[is.na(data_old$bedrooms)] <- 0
+
+table(data_old$beds) 
+# again lets regard NAs as zeros
+data_old$beds_flag <- 0
+data_old$beds_flag[is.na(data_old$beds)] <- 1 #creating a flag variable
+data_old$beds[is.na(data_old$beds)] <- 0
+
+# also the total size of amenity list can be an important variable
+data_old$TV <- ifelse(grepl("TV", data_old$amenities, ignore.case = TRUE), 1, 0)
+table(data_old$TV) 
+
+data_old$wifi <- ifelse(grepl("Wifi", data_old$amenities, ignore.case = TRUE), 1, 0)
+table(data_old$wifi) # very few don't have wifi
+
+data_old$dishwasher <- ifelse(grepl("Dishwasher", data_old$amenities, ignore.case = TRUE), 1, 0)
+table(data_old$dishwasher) 
+
+data_old$coffeemaker <- ifelse(grepl("Coffee maker", data_old$amenities, ignore.case = TRUE), 1, 0)
+table(data_old$coffeemaker) 
+
+data_old$aircon <- ifelse(grepl("Air condition", data_old$amenities, ignore.case = TRUE), 1, 0)
+table(data_old$aircon) 
+
+data_old$microwave <- ifelse(grepl("Microwave", data_old$amenities, ignore.case = TRUE), 1, 0)
+table(data_old$microwave) 
+
+data_old$heating <- ifelse(grepl("heating", data_old$amenities, ignore.case = TRUE), 1, 0)
+table(data_old$heating) 
+
+data_old$fridge <- ifelse(grepl("Refrigerator", data_old$amenities, ignore.case = TRUE), 1, 0)
+table(data_old$fridge) 
+
+data_old$bathtub <- ifelse(grepl("Bathtub", data_old$amenities, ignore.case = TRUE), 1, 0)
+table(data_old$bathtub) 
+
+data_old$kitchen <- ifelse(grepl("kitchen", data_old$amenities, ignore.case = TRUE), 1, 0)
+table(data_old$kitchen) 
+
+data_old$pool <- ifelse(grepl("pool", data_old$amenities, ignore.case = TRUE), 1, 0)
+table(data_old$pool) 
+
+#help of Chat GPT#
+# Create new variable amenity_length
+data_old$amenity_length <- str_count(data_old$amenities, ",")
+# Since the count gives the number of commas, add 1 to get the total number of amenities
+data_old$amenity_length <- data_old$amenity_length + 1
+
+summary(data_old$amenity_length) 
+
+# List of column names you want to convert to factors
+#columns_to_factor <- c("neighbourhood_cleansed", "property_type", "wifi", "TV", "dishwasher", "coffeemaker", "aircon", "microwave", "heating", "fridge", "bathtub", "kitchen", "pool", "bedrooms_flag", "beds_flag", "outlier_high", "outlier_low") #"bedrooms_outlier_flag", "beds_outlier_flag",
+
+# Use lapply to apply as.factor to the specified columns
+data_old[columns_to_factor] <- lapply(data_old[columns_to_factor], as.factor)
+data_old %>% glimpse()
+data_old <- data_old %>% mutate(accommodates_sq = accommodates^2, bathroom_sq = bathroom^2, beds_sq = beds^2, bedrooms_sq = bedrooms^2, amenity_length_sq = amenity_length^2) 
+data_old <- data_old %>% mutate(accommodates_cub = accommodates^3, bathroom_cub = bathroom^3, beds_cub = beds^3, bedrooms_cub = bedrooms^3, amenity_length_cub = amenity_length^3) 
+data_old <- data_old %>% mutate(accommodates_log = log(accommodates), amenity_length_log = log(amenity_length)) 
+
+# now check the model's performance on listings_Vienna_12_2022.csv
+
+data_holdout_w_prediction_old <- data_old %>%
+  mutate(predicted_price = predict(gbm_model2, newdata = data_old))
+model3_rmse <- sqrt(sum((data_holdout_w_prediction_old$predicted_price-data_holdout_w_prediction_old$price_numeric)^2))
+model3_rmse
 #=================== Task 3 =====================
 ##### Shapley values #####
 #install.packages("devtools")
