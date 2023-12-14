@@ -112,8 +112,6 @@ data <- data %>%
 data <- data %>% mutate(fat = ifelse(fixed_assets != 0, sales/((fixed_assets+lag(fixed_assets))/2), 0))
 summary(data$fat)
 
-hist(data$fat[data$fat !=0 & data$fat <100])
-
 p1 <- ggplot(data = data, aes(x = fat)) +
   geom_histogram(binwidth = 10, fill = "lightblue", color = "black") +
   theme_minimal()+
@@ -299,12 +297,15 @@ data <- data %>%
   mutate(sales_mil_log_sq=sales_mil_log^2)
 
 
-ggplot(data = data, aes(x=sales_mil_log, y=as.numeric(future_fast_growth))) +
+p2 <- ggplot(data = data, aes(x=sales_mil_log, y=as.numeric(future_fast_growth))) +
   geom_point(size=2,  shape=20, stroke=2, fill="blue", color="blue") +
   geom_smooth(method = "lm", formula = y ~ poly(x,2), color="green", se = F, size=1)+
   geom_smooth(method="loess", se=F, colour="yellow", size=1.5, span=0.9) +
   labs(x = "sales_mil_log",y = "future_fast_growth") +
   theme_minimal()
+p2 
+ggsave("Future Fast Growth and Current Sales.png", p2, width = 8, height = 6, dpi = 300)
+
 
 ols_s <- lm(future_fast_growth~sales_mil_log+sales_mil_log_sq,
             data = data)
@@ -325,7 +326,7 @@ d1sale_1<-ggplot(data = data, aes(x=d1_ln_fat, y=as.numeric(future_fast_growth))
   theme_minimal() +
   scale_x_continuous(limits = c(-6,10), breaks = seq(-5,10, 5))
 d1sale_1
-#save_fig("ch17-extra-1", output, "small")
+ggsave("Future Fast Growth and Current growth rate of FAT ratio.png", d1sale_1, width = 8, height = 6, dpi = 300)
 
 # generate variables ---------------------------------------------------
 summary(data$d1_ln_fat)
@@ -357,7 +358,7 @@ d1sale_2<-ggplot(data = data, aes(x=d1_ln_fat_mod, y=as.numeric(future_fast_grow
   theme_minimal() +
   scale_x_continuous(limits = c(-1.5,1.5), breaks = seq(-1.5,1.5, 0.5))
 d1sale_2
-#save_fig("ch17-extra-2", output, "small")
+#ggsave("Future Fast Growth and Current growth rate of FAT ratio.png", d1sale_2, width = 8, height = 6, dpi = 300)
 
 table(data$future_fast_growth)
 
@@ -368,7 +369,7 @@ d1sale_3<-ggplot(data = data, aes(x=d1_ln_fat, y=d1_ln_fat_mod)) +
   scale_x_continuous(limits = c(-5,5), breaks = seq(-5,5, 1)) +
   scale_y_continuous(limits = c(-3,3), breaks = seq(-3,3, 1))
 d1sale_3
-#save_fig("ch17-extra-3", output, "small")
+#ggsave("Future Fast Growth and Current growth rate of FAT ratio.png", d1sale_3, width = 8, height = 6, dpi = 300)
 
 # look at cross section
 data <- data %>%
@@ -770,8 +771,8 @@ cm2
 
 # Introduce loss function
 # relative cost of of a false negative classification (as compared with a false positive classification)
-FP=1
-FN=5
+FP=1000
+FN=5000
 cost = FN/FP
 # the prevalence, or the proportion of cases in the population (n.cases/(n.controls+n.cases))
 prevelance = sum(data_train$future_fast_growth)/length(data_train$future_fast_growth)
