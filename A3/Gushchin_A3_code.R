@@ -691,7 +691,8 @@ discrete_roc_plot <- ggplot(
         legend.text = element_text(size = 4),
         legend.key.size = unit(.4, "cm")) 
 discrete_roc_plot
-save_fig("roc-discrete-holdout")
+
+ggsave("roc-discrete-holdout.png", discrete_roc_plot, width = 8, height = 6, dpi = 300)
 
 # continuous ROC on holdout with best model (Logit 2) -------------------------------------------
 
@@ -722,6 +723,7 @@ createRocPlot <- function(r, file_name,  myheight_small = 5.625, mywidth_small =
 }
 
 createRocPlot(roc_obj_holdout, "best_logit_no_loss_roc_plot_holdout")
+ggsave("roc_plot.png", createRocPlot(roc_obj_holdout, "best_logit_no_loss_roc_plot_holdout"), width = 8, height = 6, dpi = 300)
 
 # Confusion table with different tresholds ----------------------------------------------------------
 
@@ -1028,6 +1030,17 @@ fp <- sum(data_holdout$rf_f_prediction_class == "fast_growth" & data_holdout$fut
 fn <- sum(data_holdout$rf_f_prediction_class == "no_fast_growth" & data_holdout$future_fast_growth_f == "fast_growth")
 (fp*FP + fn*FN)/length(data_holdout$future_fast_growth)
 
+# Confusion table on holdout with optimal threshold
+holdout_prediction <-
+  ifelse(data_holdout$best_logit_with_loss_pred < best_logit_optimal_treshold, "no_fast_growth", "fast_growth") %>%
+  factor(levels = c("no_fast_growth", "fast_growth"))
+cm_object4 <- confusionMatrix(data_holdout$rf_f_prediction_class,data_holdout$future_fast_growth_f)
+cm4 <- cm_object4$table
+cm4
+
+kable(x = cm4, format = "latex", booktabs=TRUE,  digits = 0, row.names = TRUE,
+      linesep = "") %>%
+  cat(.,file= "cm_rf.tex")
 
 # Summary results ---------------------------------------------------
 

@@ -44,6 +44,7 @@
 "personnel_exp_pl_flag_error",0
 "curr_liab_bs_flag_error",0
 "liq_assets_bs_flag_error",0
+"subscribed_cap_bs_flag_error",0
 "extra_profit_loss_pl_flag_zero",0
 "inc_bef_tax_pl_flag_zero",0
 "profit_loss_year_pl_flag_zero",0
