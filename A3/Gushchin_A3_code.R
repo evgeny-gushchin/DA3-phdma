@@ -112,6 +112,17 @@ data <- data %>%
 data <- data %>% mutate(fat = ifelse(fixed_assets != 0, sales/((fixed_assets+lag(fixed_assets))/2), 0))
 summary(data$fat)
 
+hist(data$fat[data$fat !=0 & data$fat <100])
+
+p1 <- ggplot(data = data, aes(x = fat)) +
+  geom_histogram(binwidth = 10, fill = "lightblue", color = "black") +
+  theme_minimal()+
+  scale_y_log10() +  # Log-scale the y-axis
+  labs(x = "FAT Ratio",
+       y = "Frequency (log scale)") +
+  xlim(0, 1000)  # Restrict x-axis to values between 0 and 1000
+ggsave("FAT Ratio hist.png", p1, width = 8, height = 6, dpi = 300)
+
 data <- data %>%
   mutate(fat = ifelse(fat < 0, 1, fat),
          ln_fat = ifelse(fat > 0, log(fat), 0))
