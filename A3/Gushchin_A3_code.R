@@ -40,6 +40,8 @@ library(dplyr)
 library(ggplot2)
 library(forcats)
 library(knitr)
+install.packages("keyATM")
+library(keyATM)
 
 setwd("/Users/evgenygushchin/Documents/GitHub/DA3-phdma/A3")
 getwd() 
@@ -139,30 +141,6 @@ table(data$future_fast_growth, data$year)
 # Option 4: Growth rate of Shareholder equity (share_eq)
 # might have nothing to do with the company's efficiency
 
-# look at cross section
-data <- data %>%
-  filter(year == 2012) %>%
-  # look at firms below 10m euro revenues and above 1000 euros
-  filter(!(sales_mil > 10)) %>%
-  filter(!(sales_mil < 0.001))
-table(data$future_fast_growth) #very unbalanced
-sum(data$future_fast_growth==1)/length(data$future_fast_growth) # <1%
-
-###dealing with unbalancedness
-# Find the indices of the majority class
-majority_indices <- data %>%
-  filter(future_fast_growth == 0) %>%
-  sample_frac(0.05) %>%  # You can adjust the fraction based on your needs
-  rownames_to_column(var = "row_index")
-
-# Select all instances of the minority class and the sampled majority class
-balanced_data <- data %>%
-  filter(future_fast_growth == 1 | row_number() %in% majority_indices$row_index)
-
-# Count the number of instances in each class in the balanced dataset
-table(balanced_data$future_fast_growth)
-sum(balanced_data$future_fast_growth==1)/length(balanced_data$future_fast_growth) # now almost 14%
-
 # change some industry category codes
 table(data$ind2)
 data <- data %>%
@@ -255,7 +233,6 @@ data <- data %>%
   mutate_at(vars(any), funs(ifelse(.> 1, 1, .))) %>%
   mutate_at(vars(any), funs("flag_zero"= as.numeric(.== 0))) %>%
   mutate_at(vars(any), funs("quad"= .^2))
-
 
 # dropping flags with no variation
 variances<- data %>%
@@ -381,6 +358,33 @@ d1sale_3<-ggplot(data = data, aes(x=d1_ln_fat, y=d1_ln_fat_mod)) +
   scale_y_continuous(limits = c(-3,3), breaks = seq(-3,3, 1))
 d1sale_3
 #save_fig("ch17-extra-3", output, "small")
+
+# look at cross section
+data <- data %>%
+  filter(year == 2012) %>%
+  # look at firms below 10m euro revenues and above 1000 euros
+  filter(!(sales_mil > 10)) %>%
+  filter(!(sales_mil < 0.001))
+table(data$future_fast_growth) #very unbalanced
+sum(data$future_fast_growth==1)/length(data$future_fast_growth) # <1%
+
+###dealing with unbalancedness
+# Find the indices of the majority class
+majority_indices <- data %>%
+  filter(future_fast_growth == 0) %>%
+  sample_frac(0.05) %>%  # You can adjust the fraction based on your needs
+  rownames_to_column(var = "row_index")
+
+# Select all instances of the minority class and the sampled majority class
+balanced_data <- data %>%
+  filter(future_fast_growth == 1 | row_number() %in% majority_indices$row_index)
+
+# Count the number of instances in each class in the balanced dataset
+table(balanced_data$future_fast_growth)
+sum(balanced_data$future_fast_growth==1)/length(balanced_data$future_fast_growth) # now almost 14%
+
+data_reserved <- data
+data <- balanced_data
 
 # Define variable sets ----------------------------------------------
 # (making sure we use ind2_cat, which is a factor)
@@ -675,7 +679,7 @@ discrete_roc_plot <- ggplot(
         legend.text = element_text(size = 4),
         legend.key.size = unit(.4, "cm")) 
 discrete_roc_plot
-#save_fig("ch17-figure-2a-roc-discrete", output, "small")
+save_fig("roc-discrete-holdout")
 
 # continuous ROC on holdout with best model (Logit 2) -------------------------------------------
 
@@ -739,21 +743,14 @@ cm_object2 <- confusionMatrix(holdout_prediction,data_holdout$future_fast_growth
 cm2 <- cm_object2$table
 cm2
 
-
-
-
-
-
 # Calibration curve -----------------------------------------------------------
 # how well do estimated vs actual event probabilities relate to each other?
-
 
 #create_calibration_plot(data_holdout, 
 #                        file_name = "ch17-figure-1-logit-m4-calibration", 
 #                        prob_var = "best_logit_no_loss_pred", 
 #                        actual_var = "default",
 #                        n_bins = 10)
-
 
 #############################################x
 # PART II.
@@ -763,7 +760,7 @@ cm2
 # Introduce loss function
 # relative cost of of a false negative classification (as compared with a false positive classification)
 FP=1
-FN=70
+FN=5
 cost = FN/FP
 # the prevalence, or the proportion of cases in the population (n.cases/(n.controls+n.cases))
 prevelance = sum(data_train$future_fast_growth)/length(data_train$future_fast_growth)
@@ -815,7 +812,7 @@ logit_summary2 <- data.frame("Avg of optimal thresholds" = unlist(best_tresholds
 kable(x = logit_summary2, format = "latex", booktabs=TRUE,  digits = 3, row.names = TRUE,
       linesep = "", col.names = c("Avg of optimal thresholds","Threshold for fold #5",
                                   "Avg expected loss","Expected loss for fold #5")) %>%
-  cat(.,file= paste0(output, "logit_summary1.tex"))
+  cat(.,file= "logit_summary1.tex")
 
 # Create plots based on Fold5 in CV ----------------------------------------------
 
@@ -875,9 +872,6 @@ rf_for_graph <-
 
 rpart.plot(rf_for_graph, tweak=1, digits=2, extra=107, under = TRUE)
 #save_tree_plot(rf_for_graph, "tree_plot", output, "small", tweak=1)
-
-
-
 
 #################################################
 # Probability forest
@@ -1033,10 +1027,10 @@ summary_results <- data.frame("Number of predictors" = unlist(nvars),
                               "CV threshold" = unlist(best_tresholds),
                               "CV expected Loss" = unlist(expected_loss))
 
-model_names <- c("Logit X1", "Logit X2",
+model_names <- c("Logit X2",
                  "Logit LASSO","RF probability")
 summary_results <- summary_results %>%
-  filter(rownames(.) %in% c("X1", "X2", "LASSO", "rf_p"))
+  filter(rownames(.) %in% c("X2", "LASSO", "rf_p"))
 rownames(summary_results) <- model_names
 
 kable(x = summary_results, format = "latex", booktabs=TRUE,  digits = 3, row.names = TRUE,
@@ -1045,3 +1039,70 @@ kable(x = summary_results, format = "latex", booktabs=TRUE,  digits = 3, row.nam
   cat(.,file= "summary_results.tex")
 
 #=================== Task 2 =====================
+
+table(data$ind2_cat)
+# NACE codes 26-33 are manufacturing
+# NACE codes 55-56 are Accommodation and food service activities
+
+data_manuf <- data %>% filter(ind2_cat == 56 | ind2_cat == 55)
+data_serv <- data %>% filter(ind2_cat != 56 & ind2_cat != 55)
+table(data_manuf$future_fast_growth)
+table(data_serv$future_fast_growth)
+
+set.seed(13505)
+
+train_indices <- as.integer(createDataPartition(data_manuf$future_fast_growth, p = 0.8, list = FALSE))
+data_manuf_train <- data_manuf[train_indices, ]
+data_manuf_holdout <- data_manuf[-train_indices, ]
+
+dim(data_manuf_train)
+dim(data_manuf_holdout)
+
+table(data_manuf$future_fast_growth_f)
+table(data_manuf_train$future_fast_growth_f)
+table(data_manuf_holdout$future_fast_growth_f)
+
+rf_model_f_manuf <- train(
+  formula(paste0("future_fast_growth_f ~ ", paste0(rfvars , collapse = " + "))),
+  method = "ranger",
+  data = data_manuf_train,
+  tuneGrid = tune_grid,
+  trControl = train_control
+)
+
+data_manuf_train$rf_f_prediction_class <-  predict(rf_model_f_manuf,type = "raw")
+data_manuf_holdout$rf_f_prediction_class <- predict(rf_model_f_manuf, newdata = data_manuf_holdout, type = "raw")
+
+#We use predicted classes to calculate expected loss based on our loss fn
+fp <- sum(data_manuf_holdout$rf_f_prediction_class == "fast_growth" & data_manuf_holdout$future_fast_growth_f == "no_fast_growth")
+fn <- sum(data_manuf_holdout$rf_f_prediction_class == "no_fast_growth" & data_manuf_holdout$future_fast_growth_f == "fast_growth")
+(fp*FP + fn*FN)/length(data_manuf_holdout$future_fast_growth)
+
+set.seed(13505)
+
+train_indices <- as.integer(createDataPartition(data_serv$future_fast_growth, p = 0.8, list = FALSE))
+data_serv_train <- data_serv[train_indices, ]
+data_serv_holdout <- data_serv[-train_indices, ]
+
+dim(data_serv_train)
+dim(data_serv_holdout)
+
+table(data_serv$future_fast_growth_f)
+table(data_serv_train$future_fast_growth_f)
+table(data_serv_holdout$future_fast_growth_f)
+
+rf_model_f_serv <- train(
+  formula(paste0("future_fast_growth_f ~ ", paste0(rfvars , collapse = " + "))),
+  method = "ranger",
+  data = data_serv_train,
+  tuneGrid = tune_grid,
+  trControl = train_control
+)
+
+data_serv_train$rf_f_prediction_class <-  predict(rf_model_f_serv,type = "raw")
+data_serv_holdout$rf_f_prediction_class <- predict(rf_model_f_serv, newdata = data_serv_holdout, type = "raw")
+
+#We use predicted classes to calculate expected loss based on our loss fn
+fp <- sum(data_serv_holdout$rf_f_prediction_class == "fast_growth" & data_serv_holdout$future_fast_growth_f == "no_fast_growth")
+fn <- sum(data_serv_holdout$rf_f_prediction_class == "no_fast_growth" & data_serv_holdout$future_fast_growth_f == "fast_growth")
+(fp*FP + fn*FN)/length(data_serv_holdout$future_fast_growth)
